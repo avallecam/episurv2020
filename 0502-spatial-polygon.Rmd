@@ -1,0 +1,724 @@
+---
+title: "03.2 Estudio en espacio: Mapa de riesgo"
+author: "CDC - GT Investigación"
+date: '`r Sys.time()`'
+output: 
+  html_document:
+    toc: TRUE
+    number_sections: true
+    toc_float: TRUE
+    code_folding: hide
+    df_print: kable
+    highlight: tango
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,warning=FALSE,message = FALSE,fig.align = "center")
+options(knitr.kable.NA = '.',digits = 2)
+```
+
+# paquetes
+
+```{r}
+library(tidyverse)
+library(magrittr)
+library(sf)
+library(tmap)
+library(ggrepel)
+library(foreign)
+library(spdep)
+library(rlang)
+library(janitor)
+library(cdcper)
+library(ggmap)
+library(broom)
+library(SpatialEpi)
+library(cartogram)
+
+library(spdep)
+library(INLA)
+library(purrr)
+
+library(ggpubr)
+options(scipen = 999)
+
+theme_set(theme_bw())
+
+```
+
+# importar bases
+
+```{r}
+location <- "~/../Dropbox/analisis espacial SGB/mape_r/"
+# importar shapes ---------------------------------------------------------
+
+per0 <- st_read(paste0(location,"data-raw/gis/PER_adm0.shp"))
+per1 <- st_read(paste0(location,"data-raw/gis/PER_adm1.shp"))
+per2 <- st_read(paste0(location,"data-raw/gis/PER_adm2.shp"))
+per4 <- st_read(paste0(location,"data-raw/gis/Distritos.shp"))
+
+per4 %>% glimpse()
+#per4 %>% count(CD_DIST)
+
+# importar exposión -------------------------------------------------------
+
+#conteo casos por semana (base temporal!)
+eda_aggr_semanal <- read_rds(paste0(location,"data/20190731-edas_ubigeo_semana.rds")) %>% 
+  rename(eda_c=casos,
+         eda_cumsum=casos_cumsum,
+         #eda_rate=rate,
+         ubigeo_pop=total)
+#eda_aggr_semanal %>% glimpse()
+# eda_aggr_semanal %>% count(ubigeo,total,sort = T)
+# eda_aggr_semanal %>% select(semana) %>% skimr::skim()
+
+#conteo consolidado semanas 15:30
+eda_aggr <- read_rds(paste0(location,"data/20190731-edas_ubigeo_nacional_sem15.rds"))
+#eda_aggr %>% glimpse()
+#eda_aggr %>% filter(n_depa=="Cajamarca") %>% count(ubigeo) #127
+eda_aggr %>% arrange(desc(casos)) %>% glimpse()
+
+# importar desenlace ------------------------------------------------------
+
+#conteo casos por semana (base temporal!)
+sgb_aggr_semanal <- read_rds(paste0(location,"data/20190803-sgb_ubigeo_semana.rds")) %>%
+  mutate(sgb=as.double(sgb))
+#sgb_aggr_semanal %>% glimpse()
+sgb_aggr_semanal %>% count(ubigeo,sort = T) %>% glimpse()
+# sgb_aggr_semanal %>% select(semana,sgb) %>% skimr::skim()
+
+#conteo consolidado semanas 21:30 con covaraibles
+sgb_ubigeo_covar <- read_rds(paste0(location,"data/20190803-sgb_ubigeo_strata_sem21a30.rds")) %>% 
+  mutate(sex=case_when(
+    sex=="f"~"mujer",
+    sex=="m"~"hombre"))
+sgb_ubigeo_covar %>% glimpse()
+#sgb_ubigeo_covar %>% count(ubigeo,sort = T)
+
+sgb_aggr <- read_rds(paste0(location,"data/20190803-sgb_ubigeo_sem21a30.rds"))
+sgb_aggr %>% glimpse()
+
+sgb_aggr %>% 
+  group_by(dpto_res) %>% 
+  summarise(sum_sgb=sum(sgb)) %>% 
+  ungroup() %>% 
+  arrange(desc(sum_sgb))
+
+# denominatores --------------------------------------------------
+
+# consolidado por ubigeo
+pop19 <- read_rds(paste0(location,"data/20190628-denominpe2019.rds"))
+
+# por estratos de edad y sexo
+pop19_strata <-  read_rds(paste0(location,"data/20190809-denominpe2019-stratas.rds")) %>% 
+  mutate(sex=case_when(
+    sex=="h"~"hombre",
+    sex=="m"~"mujer"))
+
+sgb_anual_strata <- sgb_ubigeo_covar %>% 
+  select(-(provincia:distrito)) %>% 
+  right_join(pop19_strata %>% 
+              select(ano,departamento,ubigeo,sex,age,ubigeo_pop=value)) %>% 
+  filter(departamento %in% (sgb_ubigeo_covar %>% count(departamento) %>% pull(departamento))) %>% 
+  select(-starts_with("sgb_")) %>% 
+  mutate(sgb=replace_na(sgb,0)) %>% 
+  #por incompatibilidad en escritura de provincias y distritos
+  left_join(pop19_strata %>% count(ubigeo,departamento,provincia,distrito) %>% select(-n)) %>% 
+  filter(departamento %in% c("CAJAMARCA",
+                             "PIURA",
+                             "LAMBAYEQUE")|
+           provincia %in% c("CALLAO","LIMA","HUANCAYO","TRUJILLO")) %>% 
+  mutate(departamento=if_else(departamento=="CALLAO"|
+                                departamento=="LIMA",
+                              "LIMA|CALLAO",as.character(departamento))) %>% 
+  rename(sgb_c_anual=sgb)
+
+```
+
+# unir
+
+```{r}
+# por consolidados: unir bases sgb y eda --------------------------------------------------------
+
+eda_sgb_anual <- pop19 %>% 
+  select(ubigeo:total) %>% 
+  left_join(eda_aggr %>% select(ano,ubigeo,eda_c_anual=casos)) %>% #filter(departamento=="CAJAMARCA") %>% count(ubigeo)
+  left_join(sgb_aggr %>% select(ubigeo,sgb_c_anual=sgb)) %>% #filter(departamento=="CAJAMARCA") %>% count(ubigeo)
+  filter(departamento %in% c("CAJAMARCA",
+                             "PIURA",
+                             "LAMBAYEQUE")|
+           provincia %in% c("CALLAO","LIMA","HUANCAYO","TRUJILLO")) %>% 
+  mutate(departamento=if_else(departamento=="CALLAO"|
+                                departamento=="LIMA",
+                              "LIMA|CALLAO",as.character(departamento))) %>% 
+  mutate(ano=replace_na(ano,2019),
+         eda_c_anual=replace_na(eda_c_anual,0),
+         sgb_c_anual=replace_na(sgb_c_anual,0))
+
+```
+
+# estimación por departamento
+
+## funciones
+
+```{r,echo=TRUE}
+# x funciones ---------------------------------------------------------------
+
+cdc_riskmap_01 <- function(anual) {
+  #crear data agregada por ubigeo
+  #01:union de geometria (multipoligono)
+  anual %>% 
+    #filter(departamento==dpt_lst[i]) %>% 
+    left_join(eda_aggr %>% select(ubigeo,geometry))
+}
+cdc_riskmap_02 <- function(strata) {
+  #con data estratificada por edady sexo
+  #02:data set for expected
+  strata %>% 
+    #filter(departamento==dpt_lst[i]) %>% 
+    #mutate(Y=sgb_c_anual) %>% 
+    left_join(eda_aggr %>% select(ubigeo,geometry))
+}
+
+#data_test %>% count(departamento,distrito,ubigeo)
+#data_test_0 %>% count(departamento,distrito,ubigeo)
+
+# [ pend ] calculate expected cases by stratas! -----------------------------
+
+cdc_riskmap_03 <- function(rr02) {
+  data_test_0 <- rr02
+  #verify number of stratas
+  #data_test_0 %>% count(sex,age) #must be 10
+  #03:calculate expected cases (nontidy)
+  population <- data_test_0$ubigeo_pop
+  cases <- data_test_0$sgb_c_anual
+  n.strata <- 10 # = 0 races * 2 genders * 5 age bands
+  E <- expected(population, cases, n.strata)
+  return(E)
+}
+
+
+# [ pend ] SIR per ubigeo ---------------------------------------------------
+
+cdc_riskmap_04 <- function(rr01,rr02,rr03) {
+  data_test <- rr01
+  data_test_0 <- rr02
+  E <- rr03
+  #05:union de base agregada con expected
+  #crear SIR y transformar a SpatialPolygonDF
+  map <- data_test %>% 
+    left_join(
+      data_test_0 %>% 
+        select(ubigeo) %>% 
+        distinct() %>% 
+        mutate(E=E)
+    ) %>% 
+    mutate(Y=sgb_c_anual) %>% 
+    mutate(SIR=Y/E) %>% 
+    # add data to map 
+    st_as_sf() %>% 
+    # transform to SpatialPolygonDataFrame
+    as('Spatial')
+  return(map)
+}
+
+# [ pend ] Mapping SIR ---------------------------------
+
+cdc_riskmap_13 <- function(rr04,departamento,variable,label) {
+  map <- rr04
+  variable_q <- enquo(variable)
+  #06:first map with SIR
+  mapgg03 <- map %>% 
+    st_as_sf() %>% 
+    ggplot(aes(fill=!!variable_q)) +
+    geom_sf() +
+    #scale_fill_distiller(palette = "YlOrRd",direction = 1) +
+    scale_fill_gradient(low = "white",high = "red") +
+    guides(fill = guide_colorbar(reverse=F)) +
+    theme_bw() +
+    labs(title = departamento,
+         subtitle = "Cases per district",fill=label)
+  return(mapgg03)
+}
+
+cdc_riskmap_05 <- function(rr04,departamento) {
+  map <- rr04
+  #06:first map with SIR
+  mapgg01 <- map %>% 
+    st_as_sf() %>% 
+    ggplot(aes(fill=SIR)) +
+    geom_sf() +
+    #scale_fill_distiller(palette = "YlOrRd",direction = 1) +
+    scale_fill_gradient(low = "white",high = "red") +
+    guides(fill = guide_colorbar(reverse=F)) +
+    theme_bw() +
+    labs(title = departamento,
+         subtitle = "Standardize Incidence Ratio (SIR)")
+  return(mapgg01)
+}
+
+cdc_riskmap_06 <- function(rr04,departamento,variable,label) {
+  map <- rr04
+  variable_q <- enquo(variable)
+  # alternative - cartogram
+  #plot(map)
+  map_carto <- cartogram(map, "total", itermax=5)
+  #plot(map_carto)
+  
+  mapgg02 <- map_carto %>%
+    st_as_sf() %>%
+    ggplot(aes(fill=!!variable_q)) +
+    geom_sf() +
+    #scale_fill_distiller(palette = "YlOrRd",direction = 1) +
+    scale_fill_gradient(low = "white",high = "red") +
+    #scale_fill_continuous(trans = 'reverse') +
+    guides(fill = guide_colorbar(reverse=F)) +
+    theme_bw() +
+    labs(title = departamento,
+         fill = label,
+         caption = "Cartogram: polygon area proportional to the population size")
+  return(mapgg02)
+}
+
+cdc_riskmap_15 <- function(rr04,departamento) {
+  map <- rr04
+  # alternative - cartogram
+  #plot(map)
+  map_carto <- cartogram(map, "total", itermax=5)
+  #plot(map_carto)
+  
+  mapgg02 <- map_carto %>%
+    st_as_sf() %>%
+    ggplot(aes(fill=eda_c_anual)) +
+    geom_sf() +
+    #scale_fill_distiller(palette = "YlOrRd",direction = 1) +
+    scale_fill_gradient(low = "white",high = "red") +
+    #scale_fill_continuous(trans = 'reverse') +
+    guides(fill = guide_colorbar(reverse=F)) +
+    theme_bw() +
+    labs(title = departamento,
+         subtitle = "EDA per district",
+         caption = "Cartogram: polygon area proportional to the population size")
+  return(mapgg02)
+}
+
+
+cdc_riskmap_07 <- function(rr04) {
+  map <- rr04
+  
+  # [ o ] simple regression -------------------------------------------------------
+  
+  # data_test %>% 
+  #   ggplot(aes(eda_c_anual)) +
+  #   geom_histogram() #+scale_x_log10()
+  # 
+  # data_test %>% 
+  #   ggplot(aes(sgb_c_anual)) +
+  #   geom_histogram() #+scale_x_log10()
+  # 
+  # data_test %>% 
+  #   ggplot(aes(eda_c_anual,sgb_c_anual)) +
+  #   geom_point() +
+  #   geom_smooth() #+
+  # #scale_x_log10() +
+  # #scale_y_log10()
+  
+  wm1 <- glm(Y ~ eda_c_anual, 
+             data = map %>% as_tibble(), 
+             offset = log(E),
+             family = poisson(link = "log"))
+  wm1 %>% tidy()
+  #wm1 %>% glance()
+  
+  m1 <- wm1 %>% tidy() %>% mutate(pr=exp(estimate)) %>% rownames_to_column()
+  m2 <- wm1 %>% confint_tidy() %>% mutate_all(funs(exp)) %>% rownames_to_column()
+  left_join(m1,m2) %>% 
+    dplyr::select(term,log.pr=estimate,se=std.error,pr,
+                  conf.low,conf.high,p.value) %>% 
+    mutate_at(.vars = vars(-term,-p.value),round, digits = 3) %>% 
+    mutate_at(.vars = vars(p.value),round, digits = 3) 
+  
+  # [ o ] test spatial autocorrelation of residuals -------------------------------
+  
+  wm1_resid <- wm1 %>% 
+    augment() %>% 
+    left_join(map %>% as_tibble()) %>% 
+    left_join(eda_aggr %>% select(ubigeo,geometry)) 
+  
+  wm1_resid %>% 
+    st_as_sf() %>% 
+    ggplot(aes(fill=.std.resid)) +
+    geom_sf() + #+facet_wrap(~departamento)
+    scale_fill_gradient2(low = "blue",mid = "white",high = "red",midpoint = 0)
+  
+  #transform to SpatialPolygonsDataFrame
+  wm1_resid_spdf <- wm1_resid %>% 
+    st_as_sf() %>% 
+    as('Spatial')
+  # Compute the neighborhood structure.
+  borough_nb <- poly2nb(wm1_resid_spdf)
+  # Test spatial correlation of the residuals.
+  resp <- moran.mc(wm1_resid_spdf$.std.resid, 
+                   listw = nb2listw(borough_nb), 
+                   nsim = 999)
+  
+  return(resp)
+  
+  #list_resp[[i]] <- resp
+  
+  #RRHo!
+  #then, try to add other covariates that could explain outcome (age structure?)
+  #if still presenting correlated residuals
+  #add spatial term explicity
+  #Y=xb+S(x,y)
+  #one alternative
+  #BYM model
+  #S_i ~ N(mean(S_j~i),var_i^2)
+  #a type of conditonal autoregression or CAR model
+  #use bayesian inference to estimate the parameters
+  #carbayes r package
+  #bayesx r package
+  #spatial variation explained!
+  
+  
+}
+
+# [ inla ] ----
+
+cdc_riskmap_08 <- function(rr04) {
+  map <- rr04
+  
+  #following paula moraga chapter 5 -> 5.3 small area disease risk estimation
+  
+  #BYM model
+  #log(theta) = a + u + v
+  #theta = relative risk of outcome counts against the expected counts
+  #a = overall risk level
+  #u = spatial structure random effect
+  #v = unstructure exchangable random effect
+  
+  # [ inla ] BYM model --------------------------------------------------------
+  
+  # [ inla ] Neighbourhood matrix ---------------------------------
+  # library(spdep)
+  # library(INLA)
+  nb <- poly2nb(map)
+  #head(nb)
+  nb2INLA("map.adj", nb)
+  g <- inla.read.graph(filename = "map.adj")
+  
+  # [ inla ] Inference using INLA ---------------------------------
+  
+  #index both random effects
+  map$re_u <- 1:nrow(map@data) #spatial residual variation
+  map$re_v <- 1:nrow(map@data) #modeling unstructure noise
+  
+  #create formula
+  #iid: independent and identically distributed
+  formula <- 
+    Y ~ # outcome
+    eda_c_anual + # exposure
+    f(re_u, model = "besag", graph = g) + #random effect - spatial
+    f(re_v, model = "iid") #random effect - noise
+  
+  res <- inla(formula, 
+              family = "poisson", 
+              data = map@data, 
+              E = E,
+              control.predictor = list(compute = TRUE))
+  #list_modf[[i]] <- res
+  return(res)
+  
+}
+
+cdc_riskmap_88 <- function(rr04) {
+  map <- rr04
+  
+  #following paula moraga chapter 5 -> 5.3 small area disease risk estimation
+  
+  #BYM model
+  #log(theta) = a + u + v
+  #theta = relative risk of outcome counts against the expected counts
+  #a = overall risk level
+  #u = spatial structure random effect
+  #v = unstructure exchangable random effect
+  
+  # [ inla ] BYM model --------------------------------------------------------
+  
+  # [ inla ] Neighbourhood matrix ---------------------------------
+  # library(spdep)
+  # library(INLA)
+  nb <- poly2nb(map)
+  #head(nb)
+  nb2INLA("map.adj", nb)
+  g <- inla.read.graph(filename = "map.adj")
+  
+  # [ inla ] Inference using INLA ---------------------------------
+  
+  #index both random effects
+  map$re_u <- 1:nrow(map@data) #spatial residual variation
+  map$re_v <- 1:nrow(map@data) #modeling unstructure noise
+  
+  #create formula
+  #iid: independent and identically distributed
+  formula <- 
+    Y ~ # outcome
+    #eda_c_anual + # exposure
+    f(re_u, model = "besag", graph = g) + #random effect - spatial
+    f(re_v, model = "iid") #random effect - noise
+  
+  res <- inla(formula, 
+              family = "poisson", 
+              data = map@data, 
+              E = E,
+              control.predictor = list(compute = TRUE))
+  #list_modf[[i]] <- res
+  return(res)
+  
+}
+
+
+# [ inla ] Results ---------------------------------
+cdc_riskmap_09 <- function(rr08) {
+  res <- rr08
+  return(summary(res))
+  #list_tabl[[i]] <- summary(res)
+}
+
+cdc_riskmap_10 <- function(rr08,departamento) {
+  res <- rr08
+  marginal <- inla.smarginal(res$marginals.fixed$eda_c_anual)
+  marginal <- data.frame(marginal)
+  marginal_plot <- ggplot(marginal, aes(x = exp(x), y = y)) + 
+    geom_line() +
+    geom_vline(xintercept = 1, col = "blue") + 
+    labs(title = departamento,
+         x = expression(e^beta[1]), 
+         y = "Density") +
+    xlim(c(0.9986,1.0025)) +
+    theme_bw()
+  return(marginal_plot)
+  #list_beta[[i]] <- marginal_plot
+  
+}
+
+cdc_riskmap_11 <- function(rr04,rr08) {
+  
+  map <- rr04
+  res <- rr08
+  
+  #update map with credibility intervals
+  #head(res$summary.fitted.values)
+  map$RR <- res$summary.fitted.values[, "mean"]
+  map$LL <- res$summary.fitted.values[, "0.025quant"]
+  map$UL <- res$summary.fitted.values[, "0.97quant"]
+  map$SD <- res$summary.fitted.values[, "sd"]
+  return(map)
+}
+
+
+# [ inla ] Mapping disease risk ---------------------------------
+
+cdc_riskmap_12 <- function(rr11,departamento,variable) {
+  map <- rr11
+  variable_q <- enquo(variable)
+  
+  map_rr <- map %>% 
+    st_as_sf() %>% 
+    ggplot(aes(fill=!!variable_q)) +
+    geom_sf() +
+    #scale_fill_distiller(palette = "YlOrRd",direction = 1) +
+    scale_fill_gradient2(high = "#e34a33",low = "#2b8cbe",midpoint = 1) +
+    #scale_fill_continuous(trans = 'reverse') +
+    guides(fill = guide_colorbar(reverse=F)) +
+    theme_bw() +
+    labs(title = departamento)
+  
+  #ggsave(paste0("figure/fig94-sgb-riskmap-",str_to_lower(make_clean_names(departamento)),".png"),width = 6,height = 6)
+  
+  return(map_rr)
+  #list_risk[[i]] <- map_rr
+  
+}
+
+```
+
+## map through multiple departments
+
+```{r}
+# __one department___ (new_using_postoutbrake) ----------------------------
+
+set.seed(33)
+
+riskmap_departamento <- eda_sgb_anual %>% 
+  mutate(departamento=fct_reorder(departamento,sgb_c_anual,sum), #ordenar departamentos
+         eda_c_anual=eda_c_anual/100) %>% #escalar EDA x 100
+  arrange(desc(departamento)) %>% 
+  mutate(departamento_ref=departamento) %>% 
+  group_by(departamento_ref) %>% 
+  nest() %>% 
+  rename(anual=data) %>%
+  ungroup() %>% 
+  left_join(
+    sgb_anual_strata %>% 
+      mutate(departamento_ref=departamento) %>% 
+      group_by(departamento_ref) %>% 
+      nest() %>% 
+      rename(strata=data) %>% 
+      ungroup()
+  ) %>% 
+  #slice(2) %>% 
+  mutate(rr01=map(anual,cdc_riskmap_01), #add geometry by aggregate (uso incorrecto de eda_aggr 1/3)
+         rr02=map(strata,cdc_riskmap_02), #add geometry by strata (uso incorrecto de eda_aggr 2/3)
+         rr03=map(rr02,cdc_riskmap_03), #calculate expected for aggregate by strata adjustment 
+         rr04=pmap(list(rr01,rr02,rr03),cdc_riskmap_04), #create map object with all variables 
+         rr13=pmap(list(rr04,departamento=departamento_ref),cdc_riskmap_13,variable=Y,label="SGB"), #Y case map
+         rr14=pmap(list(rr04,departamento=departamento_ref),cdc_riskmap_13,variable=eda_c_anual,label="EDA\nx100"), #X case map
+         rr05=pmap(list(rr04,departamento=departamento_ref),cdc_riskmap_05), #SIR map (O/E)
+         rr06=pmap(list(rr04,departamento=departamento_ref),cdc_riskmap_06,variable=SIR,label="SIR"), #SIR cartogram
+         # rr15=pmap(list(rr04,departamento=departamento_ref),cdc_riskmap_06,variable=eda_c_anual,label="EDA"), #EDA cartogram
+         # rr07=map(rr04,cdc_riskmap_07), #spatial autocorrelation (uso incorrecto de eda_aggr 3/3)
+         rr08=map(rr04,cdc_riskmap_08), #complete bayesian model
+         rr09=map(rr08,cdc_riskmap_09), #summary of bayesian model
+         rr10=pmap(list(rr08,departamento=departamento_ref),cdc_riskmap_10), #beta covariate distribution
+         rr11=pmap(list(rr04,rr08),cdc_riskmap_11), #update map
+         rr12=pmap(list(rr11,departamento=departamento_ref),cdc_riskmap_12,variable=RR), #risk map
+         rr16=pmap(list(rr11,departamento=departamento_ref),cdc_riskmap_12,variable=SD), #risk map variance #change!
+         #null model
+         rr88=map(rr04,cdc_riskmap_88), #complete bayesian model - null model
+         rr87=pmap(list(rr04,rr88),cdc_riskmap_11), #update map
+         rr86=pmap(list(rr87,departamento=departamento_ref),cdc_riskmap_12,variable=RR), #risk map
+  )
+```
+
+## cases map
+
+```{r,fig.height=16,fig.width=10}
+ggarrange(riskmap_departamento %>% slice(1) %>% pull(rr13) %>% .[[1]],
+          riskmap_departamento %>% slice(2) %>% pull(rr13) %>% .[[1]],
+          riskmap_departamento %>% slice(3) %>% pull(rr13) %>% .[[1]],
+          riskmap_departamento %>% slice(4) %>% pull(rr13) %>% .[[1]],
+          riskmap_departamento %>% slice(5) %>% pull(rr13) %>% .[[1]],
+          riskmap_departamento %>% slice(6) %>% pull(rr13) %>% .[[1]],
+          ncol = 2,nrow = 3)
+```
+
+```{r}
+riskmap_departamento %>% slice(2) %>% pull(rr13) %>% .[[1]]
+ggsave("figure/0502-spatial-polygon-01.png",height=4,width=5,dpi = "retina")
+```
+
+## SIR cases map
+
+```{r,fig.height=16,fig.width=10}
+ggarrange(riskmap_departamento %>% slice(1) %>% pull(rr05) %>% .[[1]],
+          riskmap_departamento %>% slice(2) %>% pull(rr05) %>% .[[1]],
+          riskmap_departamento %>% slice(3) %>% pull(rr05) %>% .[[1]],
+          riskmap_departamento %>% slice(4) %>% pull(rr05) %>% .[[1]],
+          riskmap_departamento %>% slice(5) %>% pull(rr05) %>% .[[1]],
+          riskmap_departamento %>% slice(6) %>% pull(rr05) %>% .[[1]],
+          ncol = 2,nrow = 3)
+```
+
+```{r}
+riskmap_departamento %>% slice(2) %>% pull(rr05) %>% .[[1]]
+ggsave("figure/0502-spatial-polygon-02.png",height=4,width=5,dpi = "retina")
+```
+
+
+## SIR cases cartogram
+
+```{r,fig.height=16,fig.width=10}
+ggarrange(riskmap_departamento %>% slice(1) %>% pull(rr06) %>% .[[1]],
+          riskmap_departamento %>% slice(2) %>% pull(rr06) %>% .[[1]],
+          riskmap_departamento %>% slice(3) %>% pull(rr06) %>% .[[1]],
+          riskmap_departamento %>% slice(4) %>% pull(rr06) %>% .[[1]],
+          riskmap_departamento %>% slice(5) %>% pull(rr06) %>% .[[1]],
+          riskmap_departamento %>% slice(6) %>% pull(rr06) %>% .[[1]],
+          ncol = 2,nrow = 3)
+```
+
+```{r}
+riskmap_departamento %>% slice(2) %>% pull(rr06) %>% .[[1]]
+ggsave("figure/0502-spatial-polygon-03.png",height=4,width=5,dpi = "retina")
+```
+
+```{r,fig.height=16,fig.width=10,eval=FALSE,echo=FALSE}
+## risk map (null model)
+
+# compare likelihood between EDA, IRA, etc
+riskmap_departamento %>% slice(1) %>% pull(rr88) %>% .[[1]]
+riskmap_departamento %>% slice(1) %>% pull(rr87) %>% .[[1]]
+
+ggarrange(riskmap_departamento %>% slice(1) %>% pull(rr86) %>% .[[1]],
+          riskmap_departamento %>% slice(2) %>% pull(rr86) %>% .[[1]],
+          riskmap_departamento %>% slice(3) %>% pull(rr86) %>% .[[1]],
+          riskmap_departamento %>% slice(4) %>% pull(rr86) %>% .[[1]],
+          riskmap_departamento %>% slice(5) %>% pull(rr86) %>% .[[1]],
+          riskmap_departamento %>% slice(6) %>% pull(rr86) %>% .[[1]],
+          ncol = 2,nrow = 3)
+```
+
+## risk map (adjusted by covariates)
+
+```{r,fig.height=16,fig.width=10}
+ggarrange(riskmap_departamento %>% slice(1) %>% pull(rr12) %>% .[[1]],
+          riskmap_departamento %>% slice(2) %>% pull(rr12) %>% .[[1]],
+          riskmap_departamento %>% slice(3) %>% pull(rr12) %>% .[[1]],
+          riskmap_departamento %>% slice(4) %>% pull(rr12) %>% .[[1]],
+          riskmap_departamento %>% slice(5) %>% pull(rr12) %>% .[[1]],
+          riskmap_departamento %>% slice(6) %>% pull(rr12) %>% .[[1]],
+          ncol = 2,nrow = 3)
+```
+
+## beta estimates
+
+```{r,fig.height=16,fig.width=10}
+ggarrange(riskmap_departamento %>% slice(1) %>% pull(rr10) %>% .[[1]] + xlim(0.75,1.25),
+          riskmap_departamento %>% slice(2) %>% pull(rr10) %>% .[[1]] + xlim(0.75,1.25),
+          riskmap_departamento %>% slice(3) %>% pull(rr10) %>% .[[1]] + xlim(0.75,1.25),
+          riskmap_departamento %>% slice(4) %>% pull(rr10) %>% .[[1]] + xlim(0.75,1.25),
+          riskmap_departamento %>% slice(5) %>% pull(rr10) %>% .[[1]] + xlim(0.75,1.25),
+          riskmap_departamento %>% slice(6) %>% pull(rr10) %>% .[[1]] + xlim(0.75,1.25),
+          ncol = 2,nrow = 3)
+```
+
+```{r}
+riskmap_departamento %>%
+  slice(1) %>%
+  pull(rr08) %>% .[[1]] %>%
+  summary(.) %>% .$fixed %>%
+  as_tibble(rownames = "estimate") %>%
+  clean_names() %>%
+  mutate_at(.vars = vars(mean:mode),.funs = exp)
+
+cdc_riskmap_99 <- function(rr08) {
+  res <- rr08
+  summary(res) %>% .$fixed %>%
+    as_tibble(rownames = "estimate") %>%
+    clean_names() %>%
+    mutate_at(.vars = vars(mean:mode),.funs = exp)
+}
+
+riskmap_departamento %>%
+  mutate(
+    rr99=map(rr08,cdc_riskmap_99)
+  ) %>%
+  unnest(cols = c(rr99)) %>%
+  select(-c(anual:rr16)) %>%
+  filter(estimate!="(Intercept)") %>%
+  select(-c(estimate:sd),-mode,-kld) %>%
+  mutate(x95_ci=str_c(round(x0_025quant,3)," - ",round(x0_97quant,3)),
+         irr=round(x0_5quant,3)) %>%
+  select(departamento_ref,irr,x95_ci)
+```
+
+```{r}
+riskmap_departamento %>%
+  slice(1) %>%
+  pull(rr88) %>% .[[1]] %>%
+  summary(.)
+```
+

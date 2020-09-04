@@ -1,0 +1,54 @@
+---
+title: "FARRINGTON"
+author: "CDC - GT Investigación"
+date: "8/6/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+## FARRINGTON
+
+* GLM negative binomial regression
+
+* GAM method
+```{r}
+# algo.cusum {surveillance}
+```
+
+
+```{r}
+library(surveillance)
+#Read Salmonella Agona data
+data("salmonella.agona")
+
+#Do surveillance for the last 100 weeks.
+n <- length(salmonella.agona$observed)
+#Set control parameters.
+control <- list(b=4,w=3,range=(n-100):n,reweight=TRUE, verbose=FALSE,alpha=0.01)
+res <- algo.farrington(salmonella.agona,control=control)
+#Plot the result.
+plot(res,disease="Salmonella Agona",method="Farrington")
+
+## Not run: 
+#Generate Poisson counts and convert into an "sts" object
+set.seed(123)
+x <- rpois(520,lambda=1)
+sts <- sts(observed=x, state=x*0, freq=52)
+
+#Compare timing of the two possible fitters for algo.farrington (here using S4)
+system.time( sts1 <- farrington(sts, control=list(range=312:520,
+                       fitFun="algo.farrington.fitGLM.fast")))
+system.time( sts2 <- farrington(sts, control=list(range=312:520,
+                       fitFun="algo.farrington.fitGLM")))
+
+#Check if results are the same
+stopifnot(upperbound(sts1) == upperbound(sts2))
+
+## End(Not run)
+
+```
+

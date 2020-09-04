@@ -1,0 +1,264 @@
+---
+title: "01.2 Detection: Surveillance-based algoritms"
+author: "CDC - GT Investigación"
+date: '`r Sys.time()`'
+output: 
+  html_document:
+    #pdf_document:
+    toc: TRUE
+    number_sections: true
+    toc_float: TRUE
+    code_folding: hide
+    df_print: kable
+    highlight: tango
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,warning=FALSE,message = FALSE,fig.align = "center")
+options(knitr.kable.NA = '.',digits = 2)
+```
+
+# paquetes
+
+```{r}
+library(tidyverse)
+library(readxl)
+library(janitor)
+library(magrittr)
+library(tsibble)
+library(surveillance)
+theme_set(theme_bw())
+```
+
+# importar bases
+
+## vigilancia de EDA: 2012-2018
+
+```{r}
+edapr_dis <- read_rds("data-raw/eda_12_18.rds") #%>% mutate(semana=as.factor(semana))
+pob_long <- read_rds("data-raw/pob_ubigeo12_18.rds") %>% 
+  rename(pob=value) %>% 
+  filter(ubigeo!="Total general")
+```
+
+## vigilancia de EDA: 2019
+
+```{r}
+# ABRIMOS BASE----
+eda19_dis <- read_rds("data-raw/eda19_dis.rds") %>% mutate(year=2019)
+ubigeo <- read_excel("data-raw/nombres_ubigeo.xlsx") %>% 
+  mutate(ubigeo=as.factor(ubigeo)) %>% 
+  clean_names()
+```
+
+# metodo: surveillance
+
+## descriptivo
+
+```{r}
+eda_tsibble <- edapr_dis %>% 
+  union_all(eda19_dis) %>% 
+  #expand dataframe for weeks witout reports
+  complete(ubigeo,
+           semana=full_seq(semana,1),
+           year=full_seq(year,1),fill = list(eda=0)) %>% 
+  left_join(pob_long) %>% 
+  # #Paso 2: Cálculo de tasas y suma 1 (facilitar transformación en 0 casos)
+  # mutate(tasa=eda/pob*100000+1,
+  #        #Paso 3: Transformación logarítmica de las tasas
+  #        log_tasa=log(tasa)) %>% 
+  group_by(year,semana) %>% 
+  summarise(eda=sum(eda,na.rm = T)) %>% 
+  ungroup() %>% 
+  filter(semana!=53) %>% 
+  mutate(anhosemana=yearweek(str_c(year," Week ",semana))) 
+eda_tsibble %>% slice(1:20)
+```
+
+## grafico
+
+```{r}
+eda_tsibble %>% 
+  ggplot(aes(x = anhosemana,eda)) +
+  geom_line() + 
+  scale_x_date(date_breaks="10 week", date_labels = "%Y-%U") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  labs(title = "EDAs: Serie de tiempo semanal",
+       x="Time (Año - CDC semana epidemiológica)",
+       y="N° casos por semana")
+```
+
+```{r}
+ggsave("figure/0301-ears-01.png",height=4,width=8,dpi = "retina")
+```
+
+## detección: algoritmo
+
+- moving average of counts over sliding window
+
+```{r}
+eda_tsibble %>% count(year)
+baseline <- 7
+eda_sts <- sts(observed = eda_tsibble$eda, # weekly number of cases
+                 start = c(2011,1),
+                 epoch = as.numeric(eda_tsibble$anhosemana),
+                 frequency = 52,
+                 )
+
+eda_monitored <- earsC(eda_sts, control = list(baseline = baseline))
+
+detection_db <- eda_monitored %>% 
+  as_tibble() %>% 
+  mutate(time = eda_tsibble$anhosemana[(baseline + 1):(nrow(eda_tsibble))]) %>% 
+  left_join(eda_tsibble,by = c("time"="anhosemana"))
+
+# detection_db %>% 
+#   mutate(test = observed==eda) %>% count(test)
+
+detection_db %>% arrange(desc(time)) %>% filter(year==2019) %>% avallecam::print_inf()
+```
+
+## detección: grafico
+
+```{r}
+detection_db %>% 
+  filter(!(year==2019 & semana>41)) %>% 
+  ggplot(aes(x = time,y = eda)) +
+  geom_bar(aes(fill=alarm),stat = "identity") +
+  geom_step(aes(time, upperbound)) +
+  geom_point(data = filter(detection_db, alarm), aes(x = time), y = 0, color = "red") +
+  scale_x_date(date_breaks="10 week", date_labels = "%Y-%U") +
+  scale_fill_viridis_d(direction = -1) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  labs(title = "EDAs: Serie de tiempo semanal con método EARS C1 para detección de brotes",
+       x="Time (Año - CDC semana epidemiológica)",
+       y="N° casos por semana")
+```
+
+```{r}
+ggsave("figure/0301-ears-02.png",height=4,width=8,dpi = "retina")
+```
+
+## por departamento (no estético)
+
+```{r}
+eda_tsibble <- edapr_dis %>% 
+  union_all(eda19_dis) %>% 
+  #expand dataframe for weeks witout reports
+  complete(ubigeo,
+           semana=full_seq(semana,1),
+           year=full_seq(year,1),fill = list(eda=0)) %>% 
+  left_join(pob_long) %>% 
+  # #Paso 2: Cálculo de tasas y suma 1 (facilitar transformación en 0 casos)
+  # mutate(tasa=eda/pob*100000+1,
+  #        #Paso 3: Transformación logarítmica de las tasas
+  #        log_tasa=log(tasa)) %>% 
+  
+  #departamento
+  mutate(departamento=str_replace(ubigeo,"(..).+","\\1")) %>% 
+  
+  group_by(departamento,year,semana) %>% 
+  summarise(eda=sum(eda,na.rm = T)) %>% 
+  ungroup() %>% 
+  filter(semana!=53) %>% 
+  mutate(anhosemana=yearweek(str_c(year," Week ",semana))) 
+eda_tsibble %>% slice(1:20)
+```
+
+```{r}
+sts_01 <- function(detectar_sts,data) {
+  detectar_sts %>% 
+    as_tibble() %>% 
+    mutate(time = data$anhosemana[(baseline + 1):(nrow(data))]) %>% 
+    left_join(data,by = c("time"="anhosemana")) 
+}
+
+eda_tsibble_departamento <- eda_tsibble %>% 
+  group_by(departamento) %>% 
+  nest() %>% 
+  ungroup() %>% 
+  mutate(seteo_sts=map(.x = data,
+                        .f = ~sts(observed = .$eda,
+                                  epoch = as.numeric(.$anhosemana),
+                                  start = c(2011,1),
+                                  frequency = 52),
+  )) %>% 
+  #slice(1:2) %>% pull(seteo_sts)
+  
+  mutate(detectar_sts=map(seteo_sts,~earsC(sts = .x,
+                                           control = list(baseline = baseline)))) %>% 
+  #slice(1:2) %>% pull(detectar_sts)
+  # mutate(tibble_sts=map(detectar_sts,as_tibble)) %>% 
+  # slice(1:2) %>% pull(tibble_sts)
+
+  mutate(limpiar_sts=map2(detectar_sts,data,sts_01)) %>% 
+  #slice(1:2) %>% pull(limpiar_sts)
+
+  unnest(cols = c(limpiar_sts)) 
+```
+
+```{r}
+eda_tsibble_departamento %>% 
+  
+  #grafico
+  filter(!(year==2019 & semana>41)) %>% 
+  ggplot(aes(x = time,y = eda)) +
+  geom_bar(aes(fill=alarm),stat = "identity") +
+  geom_step(aes(time, upperbound)) +
+  geom_point(data = filter(eda_tsibble_departamento,alarm), 
+             aes(x = time), y = 0, color = "red") +
+  scale_x_date(date_breaks="10 week", date_labels = "%Y-%U") +
+  scale_fill_viridis_d(direction = -1) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  labs(title = "EDAs: Serie de tiempo semanal con método EARS C1 para detección de brotes",
+       x="Time (Año - CDC semana epidemiológica)",
+       y="N° casos por semana") +
+  
+  facet_wrap(~departamento)
+
+```
+
+```{r}
+ggsave("figure/0301-ears-03.png",height=8,width=8,dpi = "retina")
+```
+
+
+```{r}
+eda_tsibble_departamento_test <- eda_tsibble_departamento %>% 
+  filter(departamento==15)
+  # filter(year==2019) %>% 
+  # avallecam::print_inf()
+
+eda_tsibble_departamento_test %>% 
+  #grafico
+  filter(!(year==2019 & semana>41)) %>% 
+  select(-data,-seteo_sts,-detectar_sts) %>% 
+  ggplot(aes(x = time,y = eda)) +
+  geom_bar(aes(fill=alarm),stat = "identity") +
+  geom_step(aes(time, upperbound)) +
+  geom_point(data = filter(eda_tsibble_departamento_test,alarm), 
+             aes(x = time), y = 0, color = "red") +
+  scale_x_date(date_breaks="10 week", date_labels = "%Y-%U") +
+  scale_fill_viridis_d(direction = -1) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  labs(title = "EDAs: Serie de tiempo semanal con método EARS C1 para detección de brotes",
+       x="Time (Año - CDC semana epidemiológica)",
+       y="N° casos por semana") +
+  
+  facet_wrap(~departamento)
+
+```
+
+
+```{r}
+ggsave("figure/0301-ears-04.png",height=4,width=8,dpi = "retina")
+```
+
+
+
+```{r}
+
+```
+

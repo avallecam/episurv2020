@@ -1,0 +1,14 @@
+---
+title: "SPATIO-TEMPORAL DETECTION"
+author: "CDC - GT Investigación"
+date: "8/6/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## HHH
+
+* hardcore spatiotemporal: endemic, autoregressive, time

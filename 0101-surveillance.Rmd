@@ -1,0 +1,479 @@
+---
+title: "Algoritmos para la Detección de Aberraciones en Vigilancia Epidemiológica"
+# subtitle: "Maestría en Ciencias de la Investigación Epidemiológica - UPCH"
+author: "Andree Valle Campos<br/> @avallecam"
+institute: "CDC - Perú<br/>Centro Nacional de Epidemiología,<br/>Prevención y Control de Enfermedades"
+date: "`r Sys.Date()`"
+output:
+  xaringan::moon_reader:
+    lib_dir: libs
+    nature:
+      highlightStyle: github
+      highlightLines: true
+      countIncrementalSlides: false
+# bibliography: references_surveillance.bib
+# link-citations: yes
+# linkcolor: Blue
+# urlcolor: Blue
+# csl: biomed-central.csl
+# # csl: american-medical-association.csl
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+options(htmltools.dir.version = FALSE)
+```
+
+```{r, load_refs, include=FALSE, cache=FALSE}
+library(RefManageR)
+BibOptions(check.entries = FALSE,
+           # bib.style = "authoryear",
+           cite.style = "numeric",
+           # cite.style = "alphabetic",
+           style = "markdown",
+           # hyperlink = FALSE,
+           dashed = FALSE)
+myBib <- ReadBib("references_surveillance.bib", check = FALSE)
+```
+
+# Temario
+
+1. __Introduction__
+  
+2. __Problemas estadísticos__
+
+3. __Métodos__ 
+  
+  * Ejemplos
+  * Ventajas y Limitaciones
+
+<!-- 2. __Clasificación__ -->
+
+---
+class: center, middle
+
+# Créditos
+
+Introducción basada en materiales creados por 
+Willy Lescano, PhD y Mary Reyes, MD.
+
+Trabajos en EDA y SGB conducidos por Cesar Munayco, PhD y 
+el grupo de trabajo en Investigación Epidemiológica y
+Evaluación de Intervenciones Sanitarias del CDC-Perú.
+
+El material aquí compartido contiene resultados no 
+publicados. 
+Licencia [CC-BY-NC-ND](https:://creativecommons.org/licenses/by-nc-nd/4.0/).
+No usar el contenido sin contactarse con los autores previamente.
+
+---
+class: center, middle
+
+# Introducción
+
+
+---
+
+# Introducción
+
+* La mayoría de los _sistemas de vigilancia_ electrónica 
+buscan detección temprana.
+
+* Grandes cantidades de datos son analizados 
+diariamente o semanalmente, a escala nominal y agregada. *
+
+* Algoritmos automatizados de _detección de aberraciones_
+son cruciales para viabilizar esta tarea.
+
+* Se necesita alta _sensibilidad_ pero también buena
+_especificidad_ para reducir falsas alarmas costosas y 
+desgastantes.
+
+
+.footnote[
+[* Visitar www.dge.gob.pe: Vigilancia Epidemiológica / Herramientas para la vigilancia](https://www.dge.gob.pe/portal/index.php?option=com_content&view=article&id=382&Itemid=135)
+]
+
+
+???
+
+El mecnaismo establecido debe detectar lo antes 
+posible cualquir acontecimiento anormal o alternación
+dela frecuencia habitual o habitualmente observada
+para una enfermedad o riesgo para la salud.
+
+La posible ocurrencia de un brote en una comunidad
+debe ser verificada
+
+debe ser sensible para detectar señales en la etapa
+más temprana posible.
+
+reference `r AutoCite(myBib, "monitoring2016")`
+
+reference `r AutoCite(myBib, "modeling2017")`
+
+reference `r AutoCite(myBib, "germany2016")`
+
+reference `r AutoCite(myBib, "book2009")`
+
+AGREGAR links a vigilancias del cdc!!!
+
+
+
+
+---
+
+# Mecanismos de detección (1/)
+
+```{r, echo=FALSE, fig.cap="", out.width = '100%',fig.align='center'}
+knitr::include_graphics("figure/eurosurv-21-30180-f1.png")
+```
+
+
+---
+
+# Mecanismos de detección (2/)
+
+```{r, echo=FALSE, fig.cap="", out.width = '100%',fig.align='center'}
+knitr::include_graphics("figure/eurosurv-21-30180-f2.png")
+```
+
+---
+
+# Problemas estadísticos
+
+* Uso de la variabilidad entre lo 
+observado y lo esperado. Este _residual_
+puede caracterizarse por tener:
+  + Dependencia Temporal
+  + Dependencia Espacial
+
+* __Autocorrelación temporal:__ Fenómeno en el que las
+observaciones tomadas en sucesión rápida son más 
+similares entre sí, en comparación a otras con mayor
+separación de tiempo.
+
+* La autocorrelación _temporal_ y _espacial_ 
+generan dependencia estadística, afectando los
+supuestos de algunos modelos estadísticos.
+
+???
+
+Según `r AutoCite(myBib, "review2012")`
+
+<!-- --- -->
+<!-- class: center, middle -->
+
+<!-- # Clasificación -->
+
+<!-- --- -->
+
+<!-- # Clasificación -->
+
+<!-- Según `r AutoCite(myBib, "review2012")`: -->
+
+<!--   * Basados en Regresión: CUSUM -->
+<!--   * Basados en Serie de Tiempo: Forecasting -->
+<!--   * Basados en Control de Procesos: EARS-C1 -->
+
+<!-- .footnote[ -->
+<!-- `r Citet(myBib, "review2012")` -->
+<!-- ] -->
+
+---
+class: center, middle
+
+# Métodos
+
+
+---
+
+# Canal Endémico
+
+* Utiliza la variabilidad 
+(Desviación Estándar o IC al 95%)
+como parámetro para determinar aberraciones.
+
+* Requiere de al menos 5 años de datos semanales.
+
+* Método estándar en vigilancia epidemiológica y
+disciplinas como meteorología.
+
+  - **anomalía:** diferencia del valor actual con
+  la media geométrica de las observaciones en años
+  pasados.
+
+--
+
+## Resultado
+
+* Zonas de seguridad, alarma y de epidemia. *
+
+.footnote[
+[* Visitar sala situacional del CDC-Perú: https://www.dge.gob.pe/salasituacional/](https://www.dge.gob.pe/salasituacional/)
+]
+
+---
+
+# Canal Endémico: EDA (1/)
+
+```{r, echo=FALSE, fig.cap="", out.width = '90%',fig.align='center'}
+knitr::include_graphics("figure/0201-echannel-02-1sd.png")
+```
+
+---
+
+# Canal Endémico: EDA (2/)
+
+```{r, echo=FALSE, fig.cap="", out.width = '90%',fig.align='center'}
+knitr::include_graphics("figure/0201-echannel-03-2sd.png")
+```
+
+---
+
+# Canal Endémico: EDA (3/)
+
+
+```{r, echo=FALSE, fig.cap="", out.width = '90%',fig.align='center'}
+knitr::include_graphics("figure/0201-echannel-04-xic.png")
+```
+
+---
+
+# Canal Endémico: EDA (4/)
+
+```{r, echo=FALSE, fig.cap="", out.width = '90%',fig.align='center'}
+knitr::include_graphics("figure/0201-echannel-01.png")
+```
+
+
+---
+
+# EARS-C1
+
+* Moving Average with sliding window
+
+* Método:
+
+```{r, echo=FALSE, fig.cap="", out.width = '100%',fig.align='center'}
+knitr::include_graphics("figure/ears-method.PNG")
+```
+
+---
+
+# EARS-C1: EDA (1/)
+
+```{r, echo=FALSE, fig.cap="", out.width = '90%',fig.align='center'}
+knitr::include_graphics("figure/0301-ears-01.png")
+```
+
+---
+
+# EARS-C1: EDA (2/)
+
+```{r, echo=FALSE, fig.cap="", out.width = '90%',fig.align='center'}
+knitr::include_graphics("figure/0301-ears-02.png")
+```
+
+---
+
+# EARS-C1: EDA (3/)
+
+```{r, echo=FALSE, fig.cap="", out.width = '90%',fig.align='center'}
+knitr::include_graphics("figure/0301-ears-03.png")
+```
+
+---
+
+# EARS-C1: EDA (4/)
+
+```{r, echo=FALSE, fig.cap="", out.width = '90%',fig.align='center'}
+knitr::include_graphics("figure/0301-ears-04.png")
+```
+
+<!-- --- -->
+
+<!-- # CUSUM -->
+
+<!-- * Monitoreo de la varianza en el tiempo -->
+
+<!-- * Acrónimo de Suma Acumulada de los residuales -->
+
+<!-- * Evalúa si el proceso está en "control" o "fuera de control" -->
+
+<!-- --- -->
+
+<!-- # Farrington -->
+
+<!-- * ver surveillance -->
+
+
+---
+
+# Pronóstico de casos:
+
+* Los métodos _forecasting_ realizan una 
+descomposición de las tendencias temporales y 
+estacionales.
+
+* En Munayco et al. 2019, aplicacon un 
+algoritmo de pronóstico _loess_ (STL) 
+o modelo de suavizamiento exponencial
+a la serie de casos mensuales de SGB.
+
+* Hicieron uso de la función `stlf` del 
+paquete __forecast__. 
+
+* Sea aplicó a nivel nacional y departamental con el objetivo de identificar el exceso de casos observados en el año 2020.
+
+---
+
+# Pronóstico de casos: SGB (1/)
+
+```{r, echo=FALSE, fig.cap="", out.width = '90%',fig.align='center'}
+knitr::include_graphics("figure/0401-forecast-01-esp.png")
+```
+
+---
+
+# Pronóstico de casos: SGB (2/)
+
+```{r, echo=FALSE, fig.cap="", out.width = '90%',fig.align='center'}
+knitr::include_graphics("figure/0401-forecast-02-obs.png")
+```
+
+---
+
+# Pronóstico de casos: SGB (3/)
+
+```{r, echo=FALSE, fig.cap="", out.width = '75%',fig.align='center'}
+knitr::include_graphics("figure/0401-forecast-03-str.png")
+```
+
+
+---
+
+# Monitoreo Espacio-Temporal
+
+* Los métodos de _Scan statistics_ permiten poner a prueba la hipótesis nula de homogeneidad espacial de eventos.
+
+* (population-based) space-time scan statistic (Kulldorff 2001)
+
+  * Compara el conteo de casos en un cluster contra los que están afuera en el periodo de interés
+
+* expectation-based Poisson scan statistic (Neill 2005)
+  
+  * Usa conteo de casos pasados no-anómalos como comparador contra el conteo observado dentro del cluster.
+
+  * Se obtienen scores relativos para visualizar la agregación espacial en _heatmaps_ usando el paquete en R __scanstatistic__. 
+
+---
+
+# Monitoreo Espacio-Temporal: SGB (1/)
+
+```{r, echo=FALSE, fig.cap="", out.width = '90%',fig.align='center'}
+knitr::include_graphics("figure/0502-spatial-polygon-01.png")
+```
+
+---
+
+# Monitoreo Espacio-Temporal: SGB (2/)
+
+
+```{r, echo=FALSE, fig.cap="", out.width = '90%',fig.align='center'}
+knitr::include_graphics("figure/0502-spatial-polygon-02.png")
+```
+
+---
+
+# Monitoreo Espacio-Temporal: SGB (3/)
+
+
+```{r, echo=FALSE, fig.cap="", out.width = '90%',fig.align='center'}
+knitr::include_graphics("figure/0502-spatial-polygon-03.png")
+```
+
+---
+
+# Monitoreo Espacio-Temporal: SGB (4/)
+
+
+```{r, echo=FALSE, fig.cap="", out.width = '70%',fig.align='center'}
+knitr::include_graphics("figure/fig04-cluster_time_space-sgbdata_raw_cleaned_timespace-de_2016w01_a_2019w30-cierre_26feb20(0952h)_spacenum_8-PIURA.png")
+```
+
+---
+
+# Monitoreo Espacio-Temporal: SGB (5/)
+
+
+```{r, echo=FALSE, fig.cap="", out.width = '90%',fig.align='center'}
+knitr::include_graphics("figure/fig04-cluster_time_space-sgbdata_raw_cleaned_timespace-de_2016w01_a_2019w30-cierre_26feb20(0952h)_spacenum_8-location-all.png")
+```
+
+<!-- --- -->
+
+<!-- # Monitoreo Espacio-Temporal: EDA y SGB con datos agregados -->
+
+<!-- * usar INLA para controlar dependencia espacial -->
+
+<!-- --- -->
+
+<!-- # Monitoreo Espacio-Temporal: Crímenes violentos -->
+
+---
+class: center, middle
+
+# Limitaciones
+
+
+---
+
+# Limitaciones
+
+- Diferentes métodos permiten lidiar con la dependencia espacial y temporal
+
+- Los datos de la vigilancia no provienen de un muestreo aleatorio.
+
+- Posee sesgo hacia los más casos moderados y severos.
+
+- Sensible a la calidad del reporte
+
+- Dependiente del métodos de registro digital del sistema de vigilancia
+
+???
+
+- nula aleatoridad, y alto tamaño muestral
+
+
+
+---
+
+# Referencias (1/2)
+
+```{r refs1, echo=FALSE, results="asis"}
+PrintBibliography(myBib,start = 1,end = 4)
+```
+
+---
+
+# Referencias (2/2)
+
+```{r refs2, echo=FALSE, results="asis"}
+PrintBibliography(myBib,start = 5,end = 5)
+```
+
+
+
+---
+
+class: center, middle
+
+# Gracias por su atención
+
+## Andree Valle Campos<br/><br/> `r icon::fa('twitter')` `r icon::fa('github')` __`@avallecam`__ <br/><br/> `r icon::fa("inbox")` __avallecam@gmail.com__
+
+.footnote[
+Slides created via the R package [**xaringan**](https://github.com/yihui/xaringan).
+]
