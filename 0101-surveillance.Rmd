@@ -472,7 +472,7 @@ class: center, middle
 
 # Gracias por su atención
 
-## Andree Valle Campos<br/><br/> `r icon::fa('twitter')` `r icon::fa('github')` __`@avallecam`__ <br/><br/> `r icon::fa("inbox")` __avallecam@gmail.com__
+## Andree Valle Campos<br/><br/> `r icons::fontawesome$brands$twitter` `r icons::fontawesome$brands$github` __`@avallecam`__ <br/><br/> `r icons::fontawesome$solid$inbox` __avallecam@gmail.com__
 
 .footnote[
 Slides created via the R package [**xaringan**](https://github.com/yihui/xaringan).
