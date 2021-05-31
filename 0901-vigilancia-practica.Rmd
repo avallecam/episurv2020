@@ -6,7 +6,7 @@ output:
   html_document:
     toc: true
     toc_float: true
-    code_folding: hide
+    # code_folding: hide
 editor_options: 
   chunk_output_type: console
 ---
@@ -18,35 +18,87 @@ knitr::opts_chunk$set(echo = TRUE, eval = TRUE, fig.align = "center")
 # - change to echo = TRUE
 ```
 
+```{r klippy, echo=FALSE, include=TRUE}
+klippy::klippy(position = c("top", "right"))
+```
+
+# Advertencias
+
+> Este documento está plegado de [__hipervínculos__](https://es.wikipedia.org/wiki/Hiperenlace), ¡aprovéchalos!
+
+> En los recuadros con `código en R`, ¡usa el botón de la esquina superior derecha para __copiar y pegar__ el contenido!
+
+> Los participantes deben conocer y comprometerse a cumplir el siguiete [Código de Conducta](https://www.metadocencia.org/cdc/). Tómate 5 minutos para leerlo
+
 # Objetivos
 
-- Presentar conceptos introductorios de R y su uso _en vivo_ para analizar una base de datos proveniente de un sistema de vigilancia
+- Analizar bases de datos provenientes de un sistema de vigilancia usando `R`
 
-- Generar gráficos con `ggplot2` y tablas con `compareGroups` para describir en tiempo, espacio, persona
+- Generar gráficos con el paquete `ggplot2` para describir en tiempo y espacio
 
-- Estimar medidas de asociación con `stats::glm` para identificar factores de riesgo 
+- Generar tablas con el paquete `compareGroups` para describir caracteristicas de persona
 
-- Construir una curva epidémica con `incidence` para calcular indicadores de tasa de crecimiento y tiempo de duplicación
+- Estimar medidas de asociación con la función `stats::glm` para identificar factores de riesgo 
+
+- Limpiar las salidas de la función `stats::glm` con el paquete `epitidy`
+
+- Construir una curva epidémica con el paquete `incidence` para calcular indicadores de tasa de crecimiento y tiempo de duplicación
+
+- Limpiar las salidas del paquete `incidence` con el paquete `incidenceflow` 
 
 - Construir un canal endémico con `epichannel` para identificar zonas de éxito, seguridad, alerta y epidemia
-
-# Código de conducta
-
-- Los participantes deben conocer y comprometerse a cumplir el siguiete [Código de Conducta](https://www.metadocencia.org/cdc/)
-
-
-> Tomemos los primeros 5 minutos para leer el __Código de Conducta__
 
 
 # INICIO
 
-# 00 - breves conceptos de R
+# 00 - ¿cómo empezar con R?
 
-1. Familiarízate con `ggplot2`. Ver [una diapositiva resumen](https://evalsp21.classes.andrewheiss.com/projects/01_lab/slides/01_lab.html#34)
+## paso a paso
 
-2. Familiarízate con `dplyr`. Ver [una diapositiva resumen](https://evalsp21.classes.andrewheiss.com/projects/01_lab/slides/01_lab.html#139)
+1. Desmitificar el uso de R creando _gráficos_ y resolviendo _ejercicios interactivos_ [con Rstudio primers](https://rstudio.cloud/learn/primers/1)
 
-3. Familiarízate con el pipe `%>%`. Ver [un ejemplo aquí](https://evalsp21.classes.andrewheiss.com/projects/01_lab/slides/01_lab.html#116)
+2. Instalar R, Rstudio y un paquete con los siguientes [pasos](https://learnr-examples.shinyapps.io/ex-setup-r/)
+
+  - Si llegas a presentar algún problema en tu computador, puedes acceder a través de tu buscador [aquí](https://rstudio.cloud/project/2585406)
+
+3. Instalar paquetes a usar aquí con la función `install.packages()`. (Pista: solo copiar y pegar!)
+
+```{r,eval=FALSE,echo=TRUE,warning=FALSE,message=FALSE}
+if(!require("remotes")) install.packages("remotes")
+if(!require("tidyverse")) install.packages("tidyverse")
+if(!require("lubridate")) install.packages("lubridate")
+if(!require("compareGroups")) install.packages("compareGroups")
+if(!require("rio")) install.packages("rio")
+if(!require("naniar")) install.packages("naniar")
+if(!require("incidence")) install.packages("incidence")
+if(!require("epiR")) install.packages("epiR")
+if(!require("epiDisplay")) install.packages("epiDisplay")
+if(!require("epitidy")) remotes::install_github("avallecam/epitidy")
+if(!require("incidenceflow")) remotes::install_github("avallecam/incidenceflow")
+if(!require("epichannel")) remotes::install_github("avallecam/epichannel")
+```
+
+4. Crear una carpeta de trabajo y proyecto en Rstudio. Más detalles del ¿qué, por qué y cómo? en [video](https://drive.google.com/file/d/1TYQV3Dy1VIxtm1OPoEGxUfjJsnHfy7ax/view?usp=sharing) y [diapositivas](https://bit.ly/r02proyectos)
+
+```
+miproyecto/
+        |_ data-cruda/
+        |_ data/
+        |_ tabla/
+        |_ archivos.R
+```
+
+## algunos conceptos clave
+
+1. Indentificar funciones, paquetes y datos en `R`. Ver [una diapositiva resumen](https://evalsp21.classes.andrewheiss.com/projects/01_lab/slides/01_lab.html#7)
+
+1. Crear gráficos con la plantilla del paquete `ggplot2`. Ver [una diapositiva resumen](https://evalsp21.classes.andrewheiss.com/projects/01_lab/slides/01_lab.html#34)
+
+2. Limpiar bases de datos usando verbos del paquete `dplyr`. Ver [una diapositiva resumen](https://evalsp21.classes.andrewheiss.com/projects/01_lab/slides/01_lab.html#139)
+
+3. Usar el operador `%>%` llamado "pipe". Ver [un ejemplo aquí](https://evalsp21.classes.andrewheiss.com/projects/01_lab/slides/01_lab.html#116)
+
+4. Para más conceptos revisar el libro en línea [The Epidemiologist R Handbook](https://epirhandbook.com/r-basics.html#r-basics), específicamente el [capítulo 3](https://epirhandbook.com/index.html) 
 
 
 # 01 - tiempo espacio persona
@@ -512,50 +564,6 @@ Aquí lista de recursos útiles para construir y publicar tableros de comando o 
 - Rstudio Webinar sobre el paquete [`flexdashboards`](https://www.rstudio.com/resources/webinars/introducing-flexdashboards/)
 
 # 06 - cierre
-
-## ¿cómo empezar con R?
-
-Recursos de utilidad __al finalizar__ esta sesión:
-
-1. Desmitificar el uso de R creando _gráficos_ y resolviendo _ejercicios interactivos_ [con Rstudio primers](https://rstudio.cloud/learn/primers/1)
-
-2. Instalar R, Rstudio y un paquete con los siguientes [pasos](https://learnr-examples.shinyapps.io/ex-setup-r/)
-
-  - Si llegas a presentar algún problema en tu computador, puedes acceder a través de tu buscador [aquí](https://rstudio.cloud/project/2585406)
-
-3. Instalar paquetes a usar aquí con la función `install.packages()`. (Pista: solo copiar y pegar!)
-
-```{r,eval=FALSE,echo=TRUE,warning=FALSE,message=FALSE}
-if(!require("remotes")) install.packages("remotes")
-if(!require("tidyverse")) install.packages("tidyverse")
-if(!require("lubridate")) install.packages("lubridate")
-if(!require("compareGroups")) install.packages("compareGroups")
-if(!require("rio")) install.packages("rio")
-if(!require("naniar")) install.packages("naniar")
-if(!require("incidence")) install.packages("incidence")
-if(!require("epiR")) install.packages("epiR")
-if(!require("epiDisplay")) install.packages("epiDisplay")
-if(!require("epitidy")) remotes::install_github("avallecam/epitidy")
-if(!require("incidenceflow")) remotes::install_github("avallecam/incidenceflow")
-if(!require("epichannel")) remotes::install_github("avallecam/epichannel")
-```
-
-4. Crear una carpeta de trabajo y proyecto en Rstudio. Más detalles del ¿qué, por qué y cómo? en [video](https://drive.google.com/file/d/1TYQV3Dy1VIxtm1OPoEGxUfjJsnHfy7ax/view?usp=sharing) y [diapositivas](https://bit.ly/r02proyectos)
-
-```
-miproyecto/
-        |_ data-cruda/
-        |_ data/
-        |_ tabla/
-        |_ archivos.R
-```
-
-6. Familiarízate con `ggplot2`. Ver [una diapositiva resumen](https://evalsp21.classes.andrewheiss.com/projects/01_lab/slides/01_lab.html#34)
-
-7. Familiarízate con `dplyr` y progresivamente con el `tidyverse`. Ver [una diapositiva resumen](https://evalsp21.classes.andrewheiss.com/projects/01_lab/slides/01_lab.html#139)
-
-5. Familiarízate con el pipe `%>%`. Ver un ejemplo [aquí](https://evalsp21.classes.andrewheiss.com/projects/01_lab/slides/01_lab.html#116)
-
 
 ## ¡Gracias por su atención!
 
