@@ -1,0 +1,704 @@
+---
+title: "Análisis de datos en Vigilancia Epidemiológica I: tiempo, espacio, persona y curva epidémica"
+author: "Andree Valle Campos<br/> avallecam@gmail.com"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    # code_folding: hide
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, eval = TRUE, fig.align = "center")
+# after class, update 
+# - unlock code_folding: hide 
+# - change to echo = TRUE
+```
+
+```{r klippy, echo=FALSE, include=TRUE}
+klippy::klippy(position = c("top", "right"))
+```
+
+# Advertencias
+
+> Este documento está plegado de [__hipervínculos__](https://es.wikipedia.org/wiki/Hiperenlace), ¡aprovéchalos!
+
+> En los recuadros con `código en R`, ¡usa el botón de la esquina superior derecha para __copiar y pegar__ el contenido!
+
+> Los participantes deben conocer y comprometerse a cumplir el siguiete [Código de Conducta](https://www.metadocencia.org/cdc/). Tómate 5 minutos para leerlo
+
+# Objetivos
+
+## Análisis exploratorio en tiempo, espacio, persona
+
+- __Importar__ bases de datos provenientes de un sistema de vigilancia usando `R`
+
+- Generar __gráficos__ con el paquete `ggplot2` para describir en tiempo y espacio
+
+- Generar __tablas__ con el paquete `compareGroups` para describir caracteristicas de persona
+
+- Estimar __medidas de asociación__ con la función `stats::glm` para identificar posibles factores asociados
+
+- __Limpiar__ las salidas de la función `stats::glm` con el paquete `epitidy`
+
+## Análisis estadístico de una curva epidémica
+
+- Construir una __curva epidémica__ con el paquete `incidence` para calcular indicadores de tasa de crecimiento y tiempo de duplicación
+
+- __Limpiar__ las salidas del paquete `incidence` con el paquete `incidenceflow` 
+
+- Realizar un __análisis estratificado__ de una curva epidémica con el paquete `incidenceflow`
+
+<!-- - Construir un canal endémico con `epichannel` para identificar zonas de éxito, seguridad, alerta y epidemia -->
+
+
+# INICIO
+
+# 00 - ¿cómo empezar con R?
+
+## paso a paso
+
+1. Desmitificar el uso de R creando _gráficos_ y resolviendo _ejercicios interactivos_ [con Rstudio primers](https://rstudio.cloud/learn/primers/1) en inglés o en [español](https://github.com/avallecam/primerspe/)
+
+2. Instalar R, Rstudio y un paquete con los siguientes [pasos](https://learnr-examples.shinyapps.io/ex-setup-r/)
+
+  - Si llegas a presentar algún problema en tu computador, puedes acceder a través de tu buscador [aquí](https://rstudio.cloud/project/2585406)
+
+3. Instalar paquetes a usar aquí con la función `install.packages()`. (Pista: solo copiar y pegar!)
+
+```{r,eval=FALSE,echo=TRUE,warning=FALSE,message=FALSE}
+if(!require("remotes")) install.packages("remotes")
+if(!require("tidyverse")) install.packages("tidyverse")
+if(!require("lubridate")) install.packages("lubridate")
+if(!require("compareGroups")) install.packages("compareGroups")
+if(!require("rio")) install.packages("rio")
+if(!require("naniar")) install.packages("naniar")
+if(!require("incidence")) install.packages("incidence")
+if(!require("epiR")) install.packages("epiR")
+if(!require("epiDisplay")) install.packages("epiDisplay")
+if(!require("epitidy")) remotes::install_github("avallecam/epitidy")
+if(!require("incidenceflow")) remotes::install_github("avallecam/incidenceflow")
+```
+
+4. Crear una carpeta de trabajo y proyecto en Rstudio. Más detalles del ¿qué, por qué y cómo? en [video](https://drive.google.com/file/d/1TYQV3Dy1VIxtm1OPoEGxUfjJsnHfy7ax/view?usp=sharing) y [diapositivas](https://bit.ly/r02proyectos)
+
+```
+miproyecto/
+        |_ data-cruda/
+        |_ data/
+        |_ tabla/
+        |_ archivos.R
+```
+
+## algunos conceptos clave
+
+1. Indentificar funciones, paquetes y datos en `R`. Ver [una diapositiva resumen](https://evalsp21.classes.andrewheiss.com/projects/01_lab/slides/01_lab.html#7)
+
+1. Crear gráficos con la plantilla del paquete `ggplot2`. Ver [una diapositiva resumen](https://evalsp21.classes.andrewheiss.com/projects/01_lab/slides/01_lab.html#34)
+
+2. Limpiar bases de datos usando verbos del paquete `dplyr`. Ver [una diapositiva resumen](https://evalsp21.classes.andrewheiss.com/projects/01_lab/slides/01_lab.html#139)
+
+3. Usar el operador `%>%` llamado "pipe". Ver [un ejemplo aquí](https://evalsp21.classes.andrewheiss.com/projects/01_lab/slides/01_lab.html#116)
+
+```r
+#' secuencia de acciones:
+
+#' yo 
+#' me despierto a las 8 horas
+#' salgo de cama por el lado correcto
+#' visto pantalones y polo
+#' salgo de casa con carro sin bicicleta
+
+yo %>%
+  despertar(tiempo = "8:00") %>%
+  salir_de_cama(lado = "correcto") %>%
+  vestir(pantalones = TRUE, polo = TRUE) %>%
+  salir_de_casa(carro = TRUE, bicicleta = FALSE)
+  
+#' ojo: no correr en R, solo es demostrativo
+```
+
+
+# 01 - tiempo espacio persona
+
+> Material original del evento [R aplicado a epidemiología](https://avallecam.github.io/epiapli2019/). Basado en tutorial del [RECON learn](https://www.reconlearn.org/post/real-time-response-1.html)
+
+## contexto
+
+Usaremos datos de un nuevo brote del virus del ébola (EVE) en un país ficticio de África occidental.
+
+Se ha notificado un nuevo brote de EVE en un país ficticio de África occidental. El Ministerio de Salud se encarga de coordinar la respuesta al brote, y lo ha contratado como consultor en análisis epidémico para informar la respuesta en tiempo real.
+
+Se le ha proporcionado la siguiente base de datos `linelist_20140701.xlsx` que contiene información de casos hasta el 1 de julio de 2014.
+
+## librerias a usar
+
+```{r,echo=TRUE,warning=FALSE,message=FALSE}
+library(tidyverse)
+library(lubridate)
+library(compareGroups)
+```
+
+## importar base de datos
+
+- La fuente original de la base de datos es parte de un tutorial del [RECON](https://www.repidemicsconsortium.org/) disponible [aquí](https://www.reconlearn.org/post/real-time-response-1.html). (Pronto habrá un nuevo [curso](https://www.cursoepidemias-col-peru-2021.org/)!)
+
+```{r,eval=FALSE,echo=FALSE}
+ruta_original <- "https://github.com/reconhub/learn/raw/master/static/data/linelist_20140701.xlsx"
+rio::import(ruta_original)
+```
+
+- Primero, importar la base de datos desde internet usando el paquete [`rio`](https://github.com/leeper/rio) con la función `import()`, luego de una limpieza de datos
+
+```{r,echo=TRUE}
+# https://github.com/avallecam/epiapli2019/blob/master/01-epi_descriptiva.R
+ruta_limpio <- "https://github.com/avallecam/epiapli2019/raw/master/data/casoslimpio_20190916.rds"
+casos_limpio <- rio::import(file = ruta_limpio)
+casos_limpio
+```
+
+- Segundo, identificar valores perdidos en base de datos usando el paquete [naniar](https://naniar.njtierney.com/index.html) con la función `miss_var_summary()` y `vis_miss()`
+
+- Explorar las variables disponibles en bases de datos
+
+```{r}
+casos_limpio %>% naniar::miss_var_summary()
+casos_limpio %>% naniar::vis_miss()
+```
+
+
+> __P1.1: ¿Por qué cree que hay valores perdidos en dichas variables?__
+
+
+## distribución en tiempo
+
+- Tercero, crear un gráfico que permita ver la frecuencia de casos por unidad de tiempo. 
+
+- Para ello, crear un _histograma_ usando el paquete [`ggplot2` (tutorial primer)](https://rstudio.cloud/learn/primers/3)
+
+- __Importante:__ Dentro de `ggplot2` usamos `+` para conectar a sus componentes y capas, de una forma simmilar al `%>%`
+
+- __yapa:__ ver video sobre [`ggplot2`](https://drive.google.com/drive/folders/1gynf5ooN-8ulVrysq5c6rPfZUcyscn04), diapositivas [aquí](https://bit.ly/r08ggplot2)
+
+```{r}
+casos_limpio %>% 
+  ggplot(aes(x = date_of_onset)) +
+  geom_histogram(binwidth = 7, color="white") +
+  scale_x_date(date_breaks = "7 day", date_labels = "%b-%d") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+
+> __P1.2: ¿Con qué otros análisis complementarías este gráfico?__
+
+## distribución en espacio
+
+- Cuarto, evaluaremos si hay una región o lugar con una mayor cantidad de casos recientes. 
+
+- Para ello, crear un diagrama de puntos. Pista: usar el [cheatsheet](https://github.com/rstudio/cheatsheets/blob/master/data-visualization-2.1.pdf) para descubrir más [geometrías](https://avallecam.github.io/workshop_ggplot2/presentation_ggplot2.html#28)!
+
+```{r}
+casos_limpio %>% 
+  ggplot(aes(x = lon, y = lat, colour = date_of_onset)) +
+  geom_point() +
+  scale_color_gradient(low = "red", high = "yellow", trans = "date") +
+  theme_bw()
+```
+
+> __P1.3: ¿Crees que hay una agregación espacial de casos? ¿Qué más harías para rechazar dicha hipótesis?__
+
+## tabla descriptiva
+
+- Quinto, describiremos las características de las persona en la base de datos
+
+- Seleccionar columnas `outcome, gender, hospital` con la función `select()` usando el paquete [`dplyr` (tutorial primer)](https://rstudio.cloud/learn/primers/2)
+
+- Crear una tabla con formato usando el paquete [`compareGroups`](https://cran.r-project.org/web/packages/compareGroups/vignettes/compareGroups_vignette.html) con la función `compareGroups()` y `createTable()`
+
+- Usar `export2md()` para ver en un formato en HTML
+
+- Transformar el orden de variables con la función `mutate()` y `fct_infreq()` usando el paquete [`dplyr` (tutorial primer)](https://rstudio.cloud/learn/primers/2.3)
+
+```{r}
+casos_limpio %>% 
+  select(outcome, gender, hospital) %>% 
+  mutate(hospital = fct_infreq(hospital),
+         outcome = fct_infreq(outcome)) %>% 
+  compareGroups(~., data = .) %>% 
+  createTable() %>% 
+  export2md()
+```
+
+> __P1.4: ¿Preguntas?__
+
+# 02 - factores asociados
+
+> Material original del evento [R aplicado a epidemiología](https://avallecam.github.io/epiapli2019/) y el paquete [`epitidy`](https://github.com/avallecam/epitidy)
+
+## contexto
+
+Usaremos datos sobre la edad, el tabaquismo y la mortalidad procedentes de una encuesta sobre el censo electoral de Whickham, un distrito mixto urbano y rural cerca de Newcastle upon Tyne, en el Reino Unido. 
+
+La encuesta se realizó en 1972-1974 para estudiar las enfermedades del corazón y de la tiroides. Veinte años después se realizó un seguimiento de los participantes en la encuesta.
+
+Este conjunto de datos contiene un subconjunto de la muestra de la encuesta: mujeres que fueron clasificadas como fumadoras actuales o como que nunca habían fumado.
+
+## librerias a usar
+
+```{r,echo=TRUE,warning=FALSE,message=FALSE}
+library(epitidy)
+```
+
+## importar base de datos
+
+- Primero, inspeccionar documentación del estudio [Whickham](https://www.rdocumentation.org/packages/mosaicData/versions/0.20.2/topics/Whickham)
+
+```{r,eval=FALSE, echo=FALSE}
+# dentro de R
+if(!require("mosaicData")) install.packages("mosaicData")
+?mosaicData::Whickham
+```
+
+- Importar base de datos posterior a una limpieza de datos
+
+```{r,echo=TRUE}
+# https://github.com/avallecam/epiapli2019/blob/master/02-clean_db.R
+smoke_limpio <- "https://github.com/avallecam/epiapli2019/raw/master/data/smokeclean_20190906.rds"
+smoke_clean <- rio::import(file = smoke_limpio)
+smoke_clean
+```
+
+## tabla descriptiva
+
+- Segundo, crear una tabla con formato usando el paquete [`compareGroups`](https://cran.r-project.org/web/packages/compareGroups/vignettes/compareGroups_vignette.html)
+
+- según la variable dependiente `outcome`, describir la distribución de tres variables `smoker+agegrp+age` 
+
+- en la función `compareGroups()` especificar el argumento `byrow = T`
+
+- en la función `createTable()` especificar los argumentos `show.all = T, sd.type = 2`
+
+```{r}
+tabla1 <- smoke_clean %>% 
+  compareGroups(outcome~smoker+agegrp+age, data = ., byrow = T) %>% 
+  createTable(show.all = T, sd.type = 2)
+
+tabla1
+```
+
+> __P2.1: ¿Qué tendencia logras identificar en las variables?__
+
+- Tercero, exportar en formato XLSX con la función `export2xls()`
+
+```{r,eval=FALSE,echo=TRUE}
+tabla1 %>% 
+  export2xls("tabla/tabla02.xls")
+```
+
+## medidas de asociación
+
+- Cuarto, estimar el riesgo de _fallecimiento_ según el hábito de _fumar_.
+
+- A un diseño de estudio epidemiológico de cohorte le corresponde estimar el Riesgo Relativo (RR)
+
+- Para ello, construir modelos de regresión lineal con la función [`glm()`](https://lindeloev.github.io/tests-as-linear/) con familia de distribución _Poisson_ función de enlace _log_ 
+
+- Luego, limpiar salidas de modelos usando el paquete [`epitidy`](https://github.com/avallecam/epitidy) con la función `epi_tidymodel_rr()`
+
+### modelo simple
+
+```{r,warning=FALSE,message=FALSE}
+# smoke_clean %>% glimpse()
+
+#simple
+simple_model <- glm(outcome_1 ~ smoker, 
+                    data = smoke_clean, 
+                    family = poisson(link = "log"))
+epi_tidymodel_rr(simple_model)
+```
+
+### modelo múltiple
+
+```{r,warning=FALSE,message=FALSE}
+#multiple: controlar por confusión
+multiple_model <- glm(outcome_1 ~ smoker + age, 
+                      data = smoke_clean, 
+                      family = poisson(link = "log"))
+epi_tidymodel_rr(multiple_model)
+```
+
+> __P2.2: ¿Cómo interpretas el cambio de RR entre muerte~fumar del modelo simple al modelo múltiple ajustado por edad?__
+
+- exportar en formato XLSX usando el paquete `writexl` con la función `write_xlsx()`
+
+```{r,eval=FALSE,echo=TRUE}
+epi_tidymodel_rr(multiple_model) %>% 
+  writexl::write_xlsx("tabla/tabla03.xlsx")
+```
+
+### métodos alternativo
+
+```{r,eval=FALSE,echo=TRUE}
+# medidas de asociación ---------------------------------------------------
+
+#epiR
+library(epiR)
+smoke_tabla1 <- with(smoke_clean,table(smoker_2,outcome_2)) %>% print()
+epi.2by2(smoke_tabla1,method = "cohort.count")
+
+#epiDisplay
+library(epiDisplay)
+smoke_tab2 <- with(smoke_clean,table(outcome,smoker)) %>% print()
+cs(cctable = smoke_tab2)
+
+# controlar por confusión -------------------------------------------------
+
+#Mantel-Haenszel
+smoke_tab3 <- with(smoke_clean,table(smoker_2,outcome_2,agegrp)) %>% print()
+epi.2by2(smoke_tab3,method = "cohort.count")
+mhor(mhtable=smoke_tab3,graph = F,design = "cohort")
+```
+
+> __P2.3: ¿Preguntas?__
+
+# INTERMEDIO
+
+> RETORNAMOS EN 5 MINUTOS
+
+# 03 - curva epidémica
+
+> Material ilustrativo disponible en la presentación [Análisis de múltiples epidemias y prevalencias con `R` y `purrr`](http://bit.ly/bbslisepi) (diapositivas 7 a 11). Extraido del paquete [`incidenceflow`](https://github.com/avallecam/incidenceflow). Basado en el el paquete [`incidence`](https://www.repidemicsconsortium.org/incidence/)
+
+## contexto
+
+Usaremos un brote simulado de la enfermedad por el virus del Ébola que coincide con algunas propiedades clave del brote de Ébola de África Occidental de 2014-2015. En concreto, se ha tenido cuidado de utilizar retrasos realistas (periodo de incubación, intervalo de serie, tiempo hasta la hospitalización, etc.) y número de reproducción.
+
+## librerias a usar
+
+```{r,echo=TRUE,warning=FALSE,message=FALSE}
+library(outbreaks) #sample data
+library(incidence) #core functions
+library(incidenceflow)
+```
+
+## importar base de datos
+
+- Primero, acceder a la base de datos `linelist` dentro de la lista `ebola_sim`
+
+```{r}
+ebola_sim$linelist %>% as_tibble()
+```
+
+- A partir de la base de datos `linelist`, extraer el vector `date_of_onset`
+
+```{r}
+dat <- ebola_sim$linelist$date_of_onset
+enframe(dat,value = "date_of_onset") %>% select(date_of_onset)
+```
+
+- Luego, configurar el vector aislado con la función `incidence()` y el argumento `interval=7`
+
+```{r}
+i.7 <- incidence(dat, interval=7)
+i.7
+```
+
+- Generar un gráfico con la función `plot()`
+
+```{r}
+plot(i.7)
+```
+
+
+## curva ascendente
+
+- Segundo, restringir los primeros 20 días con la expresión `.[1:20]`
+
+- Calcular _tasa de crecimiento_ y _tiempo de duplicación_ con la función `fit()`
+
+- Revisar las [diapositivas 6 a 9](http://bit.ly/bbslisepi) para interepretar los indicadores
+
+```{r}
+f1 <- fit(i.7[1:20])
+f1
+```
+
+## curva descendente
+
+- Tercero, identificar punto de corte de la curva con la función `fit_optim_split()`
+
+```{r}
+f2 <- fit_optim_split(i.7)
+f2
+```
+
+
+## generar tablas resumen
+
+- Cuarta, transformar salidas a formato base de datos usando el paquete [`incidenceflow`](https://github.com/avallecam/incidenceflow)
+
+### curva ascendente
+
+- Con la función `tidy_incidence()` generamos una tabla solo con la _tasa de crecimiento_ y _tiempo de duplicación_
+
+```{r}
+f1 %>% tidy_incidence()
+```
+
+- Con la función `glance_incidence()` generamos una tabla solo con las medidas de _bondad de ajuste_ del modelo lineal
+
+```{r}
+f1 %>% glance_incidence()
+```
+
+### curva descendente
+
+```{r}
+f2 %>% pluck("fit") %>% tidy_incidence()
+f2 %>% pluck("fit") %>% glance_incidence()
+```
+
+> __P3.1: ¿La tasa de crecimiento estimada antes y despúes del punto de corte es concordante con lo observado en el gráfico?__
+
+> __P3.2: ¿Preguntas?__
+
+# 04 - múltiples epidemias
+
+> Material ilustrativo disponible en la presentación [Análisis de múltiples epidemias y prevalencias con `R` y `purrr`](http://bit.ly/bbslisepi) (diapositivas 12 a 14). Extraido del paquete [`incidenceflow`](https://github.com/avallecam/incidenceflow)
+
+## analisis estratificado
+
+- Usando la familia de funciones `purrr::map` facilitaremos la estratificación por una variable categórica (sexo asignado al nacer). 
+
+- Este ejemplo puede extrapolarse a niveles administrativos a nivel nacional (departamentos y distritos, por ejemplo)
+
+```{r}
+incidence_purrr <- ebola_sim %>% 
+  # extrae base
+  pluck("linelist") %>% 
+  # filtro explícito
+  filter(date_of_onset<lubridate::ymd(20141007)) %>% 
+  # estratifica por grupos
+  group_by(gender) %>%
+  # bases anidadas --- aquí se transforma la base!
+  nest() %>% 
+  # aplicar varias funciones del flujo
+  # extraer fechas
+  mutate(only_dates = map(.x = data,
+                          .f = pull,
+                          date_of_onset)) %>% 
+  # configurar
+  mutate(incidence_strata = map(.x = only_dates,
+                                .f = incidence,
+                                interval=7)) %>% 
+  # ajustar
+  mutate(strata_fit = map(.x = incidence_strata,
+                          .f = fit)) %>% 
+  # generar tabla tidy
+  mutate(strata_fit_tidy = map(.x = strata_fit,
+                               .f = tidy_incidence)) %>% 
+  # generar tabla glance
+  mutate(strata_fit_glance = map(.x = strata_fit,
+                                 .f = glance_incidence)) %>% 
+  
+  # keep only the tibbles
+  select(-data,-only_dates,-incidence_strata,-strata_fit)
+```
+
+## generar tablas resumen
+
+```{r}
+# des-anidamos columna resultado de r y td
+incidence_purrr %>% 
+  unnest(cols = c(strata_fit_tidy))
+
+# des-anidamos columna resultado de bondad de ajuste
+incidence_purrr %>% 
+  unnest(cols = c(strata_fit_glance))
+```
+
+
+# CODA
+
+# 05 - recursos adicionales
+
+- Versión en español de “R for Data Science” https://es.r4ds.hadley.nz/index.html
+
+- Libro en inglés de R aplicada a la Epidemiología y Salud Pública https://epirhandbook.com/
+
+- Enlace en inglés para aprender atajos útiles dentro de Rstudio https://appsilon.com/rstudio-shortcuts-and-tips/
+
+# 06 - cierre
+
+## ¡Gracias por su atención!
+
+### Andree Valle Campos <br/><br/> `r icons::fontawesome$brands$twitter` `r icons::fontawesome$brands$github` __`@avallecam`__ [click aquí](https://twitter.com/avallecam) <br/><br/> `r icons::fontawesome$solid$inbox` __avallecam@gmail.com__
+
+```{r,eval=FALSE,echo=FALSE,message=FALSE}
+#generar material para estudiantes
+knitr::purl("0902-vigilancia-practica.Rmd", 
+            output = "0902-vigilancia-practica.R", 
+            documentation = 0)
+```
+
+#### código completo
+
+```{r,eval=FALSE,echo=TRUE,message=FALSE,warning=FALSE}
+
+# lista de paquetes o librerias -------------------------------------------
+
+#' solo una vez por computador
+
+if(!require("remotes")) install.packages("remotes")
+if(!require("tidyverse")) install.packages("tidyverse")
+if(!require("lubridate")) install.packages("lubridate")
+if(!require("compareGroups")) install.packages("compareGroups")
+if(!require("rio")) install.packages("rio")
+if(!require("naniar")) install.packages("naniar")
+if(!require("incidence")) install.packages("incidence")
+if(!require("epiR")) install.packages("epiR")
+if(!require("epiDisplay")) install.packages("epiDisplay")
+if(!require("epitidy")) remotes::install_github("avallecam/epitidy")
+if(!require("incidenceflow")) remotes::install_github("avallecam/incidenceflow")
+
+# llamar librerias --------------------------------------------------------
+
+#' simepre cada vez que vas a iniciar un análisis
+
+library(tidyverse)
+library(lubridate)
+library(compareGroups)
+
+
+# importar datos ----------------------------------------------------------
+
+#' el paquete readr -> leer csv, tsv
+#' el paquete haven -> leer sav, dta, 
+#' el paquete readxl -> leer xlsx
+
+# https://github.com/avallecam/epiapli2019/blob/master/01-epi_descriptiva.R
+ruta_limpio <- "https://github.com/avallecam/epiapli2019/raw/master/data/casoslimpio_20190916.rds"
+casos_limpio <- rio::import(file = ruta_limpio)
+casos_limpio
+
+#' esta notacion:
+#' 
+#' paquete::funcion
+#' 
+#' es equivalente:
+#' 
+#' library(paquete)
+#' funcion()
+
+casos_limpio %>% naniar::miss_var_summary()
+
+
+
+# tiempo ------------------------------------------------------------------
+
+ggplot(data = casos_limpio) +
+  geom_histogram(mapping = aes(x = date_of_onset),binwidth = 7)
+
+# espacial ----------------------------------------------------------------
+
+
+casos_limpio %>% 
+  ggplot(mapping = aes(x = lon,y = lat)) +
+  geom_point()
+
+
+# persona -----------------------------------------------------------------
+
+library(compareGroups)
+
+#' formulas para escribir ecuaciones o relaciones
+#' desenlace con exposición
+#' Y = beta_0 + beta_1 * X + e
+#' desenlace ~ exposicion_1 + exposición_2 ...
+#' ~ .
+
+casos_limpio %>% 
+  select(outcome,gender,hospital) %>% 
+  compareGroups(formula = ~.,data = .) %>% 
+  createTable() %>% 
+  export2xls(file = "tabla/01-tabla_01.xlsx")
+
+#' sugerencia:
+#' cada vez que tengas un error
+#' - mandar una imagen o pantallazo del error
+#' - reprex
+
+
+
+
+
+# llamar librerias o paquetes ---------------------------------------------
+
+library(outbreaks) #sample data
+library(incidence) #core functions
+library(incidenceflow)
+
+
+# importar base de datos --------------------------------------------------
+
+str(ebola_sim)
+
+ebola_sim$linelist %>% as_tibble()
+
+fecha_inicio_sintomas <- ebola_sim$linelist$date_of_onset
+
+fecha_inicio_sintomas
+
+incidencia_semana <- incidence(dates = fecha_inicio_sintomas,interval = 7)
+
+plot(incidencia_semana)
+
+# curva ascendente ---------------------------------------------------------
+
+
+plot(incidencia_semana[1:20])
+
+fit(x = incidencia_semana[1:20])
+
+
+# curva descendente --------------------------------------------------------
+
+
+# estratificado -----------------------------------------------------------
+
+ebola_data <- ebola_sim %>% 
+  pluck("linelist") 
+
+ebola_data %>% count(gender)
+
+estratificado <- ebola_data %>% 
+  as_tibble() %>% 
+  filter(date_of_onset<lubridate::ymd("20141007")) %>% 
+  group_by(gender) %>% 
+  nest() %>% 
+  mutate(only_date = map(.x = data,.f = pull, date_of_onset)) %>% 
+  mutate(incidence_strata = map(.x = only_date,.f = incidence, interval=7)) %>% 
+  mutate(strata_fit = map(.x = incidence_strata,.f = fit)) %>% 
+  # generar tabla tidy
+  mutate(strata_fit_tidy = map(.x = strata_fit,
+                               .f = tidy_incidence)) %>% 
+  # generar tabla glance
+  mutate(strata_fit_glance = map(.x = strata_fit,
+                                 .f = glance_incidence)) %>% 
+  # keep only the tibbles
+  select(-data,-only_date,-incidence_strata,-strata_fit)
+
+
+estratificado %>% 
+  unnest(cols = c(strata_fit_tidy))
+
+estratificado %>% 
+  unnest(cols = c(strata_fit_glance))
+
+ 
+
+```
+
