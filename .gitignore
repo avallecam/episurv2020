@@ -1,7 +1,11 @@
 .Rproj.user
 .Rhistory
 .RData
-*/*
+R/*
+rsconnect/*
+notrack/*
+data/*
+data-raw/*
 02*.html
 03*.html
 04*.html
