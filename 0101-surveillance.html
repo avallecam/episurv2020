@@ -1,0 +1,582 @@
+<!DOCTYPE html>
+<html lang="" xml:lang="">
+  <head>
+    <title>Algoritmos para la Detección de Aberraciones en Vigilancia Epidemiológica</title>
+    <meta charset="utf-8" />
+    <meta name="author" content="Andree Valle Campos  @avallecam" />
+    <meta name="date" content="2021-05-25" />
+    <script src="libs/header-attrs/header-attrs.js"></script>
+    <link href="libs/remark-css/default.css" rel="stylesheet" />
+    <link href="libs/remark-css/default-fonts.css" rel="stylesheet" />
+  </head>
+  <body>
+    <textarea id="source">
+class: center, middle, inverse, title-slide
+
+# Algoritmos para la Detección de Aberraciones en Vigilancia Epidemiológica
+### Andree Valle Campos<br/> <span class="citation">@avallecam</span>
+### CDC - Perú<br/>Centro Nacional de Epidemiología,<br/>Prevención y Control de Enfermedades
+### 2021-05-25
+
+---
+
+
+
+
+
+
+# Temario
+
+1. __Introduction__
+  
+2. __Problemas estadísticos__
+
+3. __Métodos__ 
+  
+  * Ejemplos
+  * Ventajas y Limitaciones
+
+&lt;!-- 2. __Clasificación__ --&gt;
+
+---
+class: center, middle
+
+# Créditos
+
+Introducción basada en materiales creados por 
+Willy Lescano, PhD y Mary Reyes, MD.
+
+Trabajos en EDA y SGB conducidos por Cesar Munayco, PhD y 
+el grupo de trabajo en Investigación Epidemiológica y
+Evaluación de Intervenciones Sanitarias del CDC-Perú.
+
+El material aquí compartido contiene resultados no 
+publicados. 
+Licencia [CC-BY-NC-ND](https:://creativecommons.org/licenses/by-nc-nd/4.0/).
+No usar el contenido sin contactarse con los autores previamente.
+
+---
+class: center, middle
+
+# Introducción
+
+
+---
+
+# Introducción
+
+* La mayoría de los _sistemas de vigilancia_ electrónica 
+buscan detección temprana.
+
+* Grandes cantidades de datos son analizados 
+diariamente o semanalmente, a escala nominal y agregada. *
+
+* Algoritmos automatizados de _detección de aberraciones_
+son cruciales para viabilizar esta tarea.
+
+* Se necesita alta _sensibilidad_ pero también buena
+_especificidad_ para reducir falsas alarmas costosas y 
+desgastantes.
+
+
+.footnote[
+[* Visitar www.dge.gob.pe: Vigilancia Epidemiológica / Herramientas para la vigilancia](https://www.dge.gob.pe/portal/index.php?option=com_content&amp;view=article&amp;id=382&amp;Itemid=135)
+]
+
+
+???
+
+El mecnaismo establecido debe detectar lo antes 
+posible cualquir acontecimiento anormal o alternación
+dela frecuencia habitual o habitualmente observada
+para una enfermedad o riesgo para la salud.
+
+La posible ocurrencia de un brote en una comunidad
+debe ser verificada
+
+debe ser sensible para detectar señales en la etapa
+más temprana posible.
+
+reference &lt;a name=cite-monitoring2016&gt;&lt;/a&gt;[[1](https://doi.org/10.18637/jss.v070.i10)]
+
+reference &lt;a name=cite-modeling2017&gt;&lt;/a&gt;[[2](https://doi.org/10.18637/jss.v077.i11)]
+
+reference &lt;a name=cite-germany2016&gt;&lt;/a&gt;[[3](https://www.eurosurveillance.org/content/10.2807/1560-7917.ES.2016.21.13.30180)]
+
+reference &lt;a name=cite-book2009&gt;&lt;/a&gt;[[4](https://doi.org/10.1093/acprof:oso/9780195146493.001.0001)]
+
+AGREGAR links a vigilancias del cdc!!!
+
+
+
+
+---
+
+# Mecanismos de detección (1/)
+
+&lt;img src="figure/eurosurv-21-30180-f1.png" width="100%" style="display: block; margin: auto;" /&gt;
+
+
+---
+
+# Mecanismos de detección (2/)
+
+&lt;img src="figure/eurosurv-21-30180-f2.png" width="100%" style="display: block; margin: auto;" /&gt;
+
+---
+
+# Problemas estadísticos
+
+* Uso de la variabilidad entre lo 
+observado y lo esperado. Este _residual_
+puede caracterizarse por tener:
+  + Dependencia Temporal
+  + Dependencia Espacial
+
+* __Autocorrelación temporal:__ Fenómeno en el que las
+observaciones tomadas en sucesión rápida son más 
+similares entre sí, en comparación a otras con mayor
+separación de tiempo.
+
+* La autocorrelación _temporal_ y _espacial_ 
+generan dependencia estadística, afectando los
+supuestos de algunos modelos estadísticos.
+
+???
+
+Según &lt;a name=cite-review2012&gt;&lt;/a&gt;[[5](https://rss.onlinelibrary.wiley.com/doi/abs/10.1111/j.1467-985X.2011.00714.x)]
+
+&lt;!-- --- --&gt;
+&lt;!-- class: center, middle --&gt;
+
+&lt;!-- # Clasificación --&gt;
+
+&lt;!-- --- --&gt;
+
+&lt;!-- # Clasificación --&gt;
+
+&lt;!-- Según [[5](https://rss.onlinelibrary.wiley.com/doi/abs/10.1111/j.1467-985X.2011.00714.x)]: --&gt;
+
+&lt;!--   * Basados en Regresión: CUSUM --&gt;
+&lt;!--   * Basados en Serie de Tiempo: Forecasting --&gt;
+&lt;!--   * Basados en Control de Procesos: EARS-C1 --&gt;
+
+&lt;!-- .footnote[ --&gt;
+&lt;!-- [Unkel, Farrington, Garthwaite, et al. [5]](https://rss.onlinelibrary.wiley.com/doi/abs/10.1111/j.1467-985X.2011.00714.x) --&gt;
+&lt;!-- ] --&gt;
+
+---
+class: center, middle
+
+# Métodos
+
+
+---
+
+# Canal Endémico
+
+* Utiliza la variabilidad 
+(Desviación Estándar o IC al 95%)
+como parámetro para determinar aberraciones.
+
+* Requiere de al menos 5 años de datos semanales.
+
+* Método estándar en vigilancia epidemiológica y
+disciplinas como meteorología.
+
+  - **anomalía:** diferencia del valor actual con
+  la media geométrica de las observaciones en años
+  pasados.
+
+--
+
+## Resultado
+
+* Zonas de seguridad, alarma y de epidemia. *
+
+.footnote[
+[* Visitar sala situacional del CDC-Perú: https://www.dge.gob.pe/salasituacional/](https://www.dge.gob.pe/salasituacional/)
+]
+
+---
+
+# Canal Endémico: EDA (1/)
+
+&lt;img src="figure/0201-echannel-02-1sd.png" width="90%" style="display: block; margin: auto;" /&gt;
+
+---
+
+# Canal Endémico: EDA (2/)
+
+&lt;img src="figure/0201-echannel-03-2sd.png" width="90%" style="display: block; margin: auto;" /&gt;
+
+---
+
+# Canal Endémico: EDA (3/)
+
+
+&lt;img src="figure/0201-echannel-04-xic.png" width="90%" style="display: block; margin: auto;" /&gt;
+
+---
+
+# Canal Endémico: EDA (4/)
+
+&lt;img src="figure/0201-echannel-01.png" width="90%" style="display: block; margin: auto;" /&gt;
+
+
+---
+
+# EARS-C1
+
+* Moving Average with sliding window
+
+* Método:
+
+&lt;img src="figure/ears-method.PNG" width="100%" style="display: block; margin: auto;" /&gt;
+
+---
+
+# EARS-C1: EDA (1/)
+
+&lt;img src="figure/0301-ears-01.png" width="90%" style="display: block; margin: auto;" /&gt;
+
+---
+
+# EARS-C1: EDA (2/)
+
+&lt;img src="figure/0301-ears-02.png" width="90%" style="display: block; margin: auto;" /&gt;
+
+---
+
+# EARS-C1: EDA (3/)
+
+&lt;img src="figure/0301-ears-03.png" width="90%" style="display: block; margin: auto;" /&gt;
+
+---
+
+# EARS-C1: EDA (4/)
+
+&lt;img src="figure/0301-ears-04.png" width="90%" style="display: block; margin: auto;" /&gt;
+
+&lt;!-- --- --&gt;
+
+&lt;!-- # CUSUM --&gt;
+
+&lt;!-- * Monitoreo de la varianza en el tiempo --&gt;
+
+&lt;!-- * Acrónimo de Suma Acumulada de los residuales --&gt;
+
+&lt;!-- * Evalúa si el proceso está en "control" o "fuera de control" --&gt;
+
+&lt;!-- --- --&gt;
+
+&lt;!-- # Farrington --&gt;
+
+&lt;!-- * ver surveillance --&gt;
+
+
+---
+
+# Pronóstico de casos:
+
+* Los métodos _forecasting_ realizan una 
+descomposición de las tendencias temporales y 
+estacionales.
+
+* En Munayco et al. 2019, aplicacon un 
+algoritmo de pronóstico _loess_ (STL) 
+o modelo de suavizamiento exponencial
+a la serie de casos mensuales de SGB.
+
+* Hicieron uso de la función `stlf` del 
+paquete __forecast__. 
+
+* Sea aplicó a nivel nacional y departamental con el objetivo de identificar el exceso de casos observados en el año 2020.
+
+---
+
+# Pronóstico de casos: SGB (1/)
+
+&lt;img src="figure/0401-forecast-01-esp.png" width="90%" style="display: block; margin: auto;" /&gt;
+
+---
+
+# Pronóstico de casos: SGB (2/)
+
+&lt;img src="figure/0401-forecast-02-obs.png" width="90%" style="display: block; margin: auto;" /&gt;
+
+---
+
+# Pronóstico de casos: SGB (3/)
+
+&lt;img src="figure/0401-forecast-03-str.png" width="75%" style="display: block; margin: auto;" /&gt;
+
+
+---
+
+# Monitoreo Espacio-Temporal
+
+* Los métodos de _Scan statistics_ permiten poner a prueba la hipótesis nula de homogeneidad espacial de eventos.
+
+* (population-based) space-time scan statistic (Kulldorff 2001)
+
+  * Compara el conteo de casos en un cluster contra los que están afuera en el periodo de interés
+
+* expectation-based Poisson scan statistic (Neill 2005)
+  
+  * Usa conteo de casos pasados no-anómalos como comparador contra el conteo observado dentro del cluster.
+
+  * Se obtienen scores relativos para visualizar la agregación espacial en _heatmaps_ usando el paquete en R __scanstatistic__. 
+
+---
+
+# Monitoreo Espacio-Temporal: SGB (1/)
+
+&lt;img src="figure/0502-spatial-polygon-01.png" width="90%" style="display: block; margin: auto;" /&gt;
+
+---
+
+# Monitoreo Espacio-Temporal: SGB (2/)
+
+
+&lt;img src="figure/0502-spatial-polygon-02.png" width="90%" style="display: block; margin: auto;" /&gt;
+
+---
+
+# Monitoreo Espacio-Temporal: SGB (3/)
+
+
+&lt;img src="figure/0502-spatial-polygon-03.png" width="90%" style="display: block; margin: auto;" /&gt;
+
+---
+
+# Monitoreo Espacio-Temporal: SGB (4/)
+
+
+&lt;img src="figure/fig04-cluster_time_space-sgbdata_raw_cleaned_timespace-de_2016w01_a_2019w30-cierre_26feb20(0952h)_spacenum_8-PIURA.png" width="70%" style="display: block; margin: auto;" /&gt;
+
+---
+
+# Monitoreo Espacio-Temporal: SGB (5/)
+
+
+&lt;img src="figure/fig04-cluster_time_space-sgbdata_raw_cleaned_timespace-de_2016w01_a_2019w30-cierre_26feb20(0952h)_spacenum_8-location-all.png" width="90%" style="display: block; margin: auto;" /&gt;
+
+&lt;!-- --- --&gt;
+
+&lt;!-- # Monitoreo Espacio-Temporal: EDA y SGB con datos agregados --&gt;
+
+&lt;!-- * usar INLA para controlar dependencia espacial --&gt;
+
+&lt;!-- --- --&gt;
+
+&lt;!-- # Monitoreo Espacio-Temporal: Crímenes violentos --&gt;
+
+---
+class: center, middle
+
+# Limitaciones
+
+
+---
+
+# Limitaciones
+
+- Diferentes métodos permiten lidiar con la dependencia espacial y temporal
+
+- Los datos de la vigilancia no provienen de un muestreo aleatorio.
+
+- Posee sesgo hacia los más casos moderados y severos.
+
+- Sensible a la calidad del reporte
+
+- Dependiente del métodos de registro digital del sistema de vigilancia
+
+???
+
+- nula aleatoridad, y alto tamaño muestral
+
+
+
+---
+
+# Referencias (1/2)
+
+&lt;a name=bib-monitoring2016&gt;&lt;/a&gt;[[1]](#cite-monitoring2016) M. Salmon,
+D. Schumacher, and M. Höhle. "Monitoring Count Time Series in R:
+Aberration Detection in Public Health Surveillance". In: _Journal of
+Statistical Software_ 70.10 (2016), pp. 1-35. DOI:
+[10.18637/jss.v070.i10](https://doi.org/10.18637%2Fjss.v070.i10).
+
+&lt;a name=bib-modeling2017&gt;&lt;/a&gt;[[2]](#cite-modeling2017) S. Meyer, L.
+Held, and M. Höhle. "Spatio-Temporal Analysis of Epidemic Phenomena
+Using the R Package surveillance". In: _Journal of Statistical
+Software_ 77.11 (2017), pp. 1-55. DOI:
+[10.18637/jss.v077.i11](https://doi.org/10.18637%2Fjss.v077.i11).
+
+&lt;a name=bib-germany2016&gt;&lt;/a&gt;[[3]](#cite-germany2016) M. Salmon, D.
+Schumacher, H. Burmann, et al. "A system for automated outbreak
+detection of communicable diseases in Germany". In: _Eurosurveillance_
+21.13 (2016). DOI:
+[https://doi.org/10.2807/1560-7917.ES.2016.21.13.30180](https://doi.org/https%3A%2F%2Fdoi.org%2F10.2807%2F1560-7917.ES.2016.21.13.30180).
+URL:
+[https://www.eurosurveillance.org/content/10.2807/1560-7917.ES.2016.21.13.30180](https://www.eurosurveillance.org/content/10.2807/1560-7917.ES.2016.21.13.30180).
+
+&lt;a name=bib-book2009&gt;&lt;/a&gt;[[4]](#cite-book2009) R. Brookmeyer and D. F.
+Stroup. "Monitoring the Health of Populations: Statistical Principles
+and Methods for Public Health Surveillance". English (US). In:
+_Monitoring the Health of Populations_. Oxford University Press, Set..
+2009, pp. 1-388. ISBN: 9780195146493. DOI:
+[10.1093/acprof:oso/9780195146493.001.0001](https://doi.org/10.1093%2Facprof%3Aoso%2F9780195146493.001.0001).
+
+---
+
+# Referencias (2/2)
+
+&lt;a name=bib-review2012&gt;&lt;/a&gt;[[5]](#cite-review2012) S. Unkel, C. P.
+Farrington, P. H. Garthwaite, et al. "Statistical methods for the
+prospective detection of infectious disease outbreaks: a review". In:
+_Journal of the Royal Statistical Society: Series A (Statistics in
+Society)_ 175.1 (2012), pp. 49-82. DOI:
+[10.1111/j.1467-985X.2011.00714.x](https://doi.org/10.1111%2Fj.1467-985X.2011.00714.x).
+eprint:
+https://rss.onlinelibrary.wiley.com/doi/pdf/10.1111/j.1467-985X.2011.00714.x.
+URL:
+[https://rss.onlinelibrary.wiley.com/doi/abs/10.1111/j.1467-985X.2011.00714.x](https://rss.onlinelibrary.wiley.com/doi/abs/10.1111/j.1467-985X.2011.00714.x).
+
+
+
+---
+
+class: center, middle
+
+# Gracias por su atención
+
+## Andree Valle Campos&lt;br/&gt;&lt;br/&gt; &lt;svg viewBox="0 0 512 512" style="height:1em;position:relative;display:inline-block;top:.1em;" xmlns="http://www.w3.org/2000/svg"&gt;  &lt;path d="M459.37 151.716c.325 4.548.325 9.097.325 13.645 0 138.72-105.583 298.558-298.558 298.558-59.452 0-114.68-17.219-161.137-47.106 8.447.974 16.568 1.299 25.34 1.299 49.055 0 94.213-16.568 130.274-44.832-46.132-.975-84.792-31.188-98.112-72.772 6.498.974 12.995 1.624 19.818 1.624 9.421 0 18.843-1.3 27.614-3.573-48.081-9.747-84.143-51.98-84.143-102.985v-1.299c13.969 7.797 30.214 12.67 47.431 13.319-28.264-18.843-46.781-51.005-46.781-87.391 0-19.492 5.197-37.36 14.294-52.954 51.655 63.675 129.3 105.258 216.365 109.807-1.624-7.797-2.599-15.918-2.599-24.04 0-57.828 46.782-104.934 104.934-104.934 30.213 0 57.502 12.67 76.67 33.137 23.715-4.548 46.456-13.32 66.599-25.34-7.798 24.366-24.366 44.833-46.132 57.827 21.117-2.273 41.584-8.122 60.426-16.243-14.292 20.791-32.161 39.308-52.628 54.253z"&gt;&lt;/path&gt;&lt;/svg&gt; &lt;svg viewBox="0 0 496 512" style="height:1em;position:relative;display:inline-block;top:.1em;" xmlns="http://www.w3.org/2000/svg"&gt;  &lt;path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6zm-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3zm44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9zM244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8zM97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1zm-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7zm32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1zm-11.4-14.7c-1.6 1-1.6 3.6 0 5.9 1.6 2.3 4.3 3.3 5.6 2.3 1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2z"&gt;&lt;/path&gt;&lt;/svg&gt; __`@avallecam`__ &lt;br/&gt;&lt;br/&gt; &lt;svg viewBox="0 0 576 512" style="height:1em;position:relative;display:inline-block;top:.1em;" xmlns="http://www.w3.org/2000/svg"&gt;  &lt;path d="M567.938 243.908L462.25 85.374A48.003 48.003 0 0 0 422.311 64H153.689a48 48 0 0 0-39.938 21.374L8.062 243.908A47.994 47.994 0 0 0 0 270.533V400c0 26.51 21.49 48 48 48h480c26.51 0 48-21.49 48-48V270.533a47.994 47.994 0 0 0-8.062-26.625zM162.252 128h251.497l85.333 128H376l-32 64H232l-32-64H76.918l85.334-128z"&gt;&lt;/path&gt;&lt;/svg&gt; __avallecam@gmail.com__
+
+.footnote[
+Slides created via the R package [**xaringan**](https://github.com/yihui/xaringan).
+]
+    </textarea>
+<style data-target="print-only">@media screen {.remark-slide-container{display:block;}.remark-slide-scaler{box-shadow:none;}}</style>
+<script src="https://remarkjs.com/downloads/remark-latest.min.js"></script>
+<script>var slideshow = remark.create({
+"highlightStyle": "github",
+"highlightLines": true,
+"countIncrementalSlides": false
+});
+if (window.HTMLWidgets) slideshow.on('afterShowSlide', function (slide) {
+  window.dispatchEvent(new Event('resize'));
+});
+(function(d) {
+  var s = d.createElement("style"), r = d.querySelector(".remark-slide-scaler");
+  if (!r) return;
+  s.type = "text/css"; s.innerHTML = "@page {size: " + r.style.width + " " + r.style.height +"; }";
+  d.head.appendChild(s);
+})(document);
+
+(function(d) {
+  var el = d.getElementsByClassName("remark-slides-area");
+  if (!el) return;
+  var slide, slides = slideshow.getSlides(), els = el[0].children;
+  for (var i = 1; i < slides.length; i++) {
+    slide = slides[i];
+    if (slide.properties.continued === "true" || slide.properties.count === "false") {
+      els[i - 1].className += ' has-continuation';
+    }
+  }
+  var s = d.createElement("style");
+  s.type = "text/css"; s.innerHTML = "@media print { .has-continuation { display: none; } }";
+  d.head.appendChild(s);
+})(document);
+// delete the temporary CSS (for displaying all slides initially) when the user
+// starts to view slides
+(function() {
+  var deleted = false;
+  slideshow.on('beforeShowSlide', function(slide) {
+    if (deleted) return;
+    var sheets = document.styleSheets, node;
+    for (var i = 0; i < sheets.length; i++) {
+      node = sheets[i].ownerNode;
+      if (node.dataset["target"] !== "print-only") continue;
+      node.parentNode.removeChild(node);
+    }
+    deleted = true;
+  });
+})();
+(function() {
+  "use strict"
+  // Replace <script> tags in slides area to make them executable
+  var scripts = document.querySelectorAll(
+    '.remark-slides-area .remark-slide-container script'
+  );
+  if (!scripts.length) return;
+  for (var i = 0; i < scripts.length; i++) {
+    var s = document.createElement('script');
+    var code = document.createTextNode(scripts[i].textContent);
+    s.appendChild(code);
+    var scriptAttrs = scripts[i].attributes;
+    for (var j = 0; j < scriptAttrs.length; j++) {
+      s.setAttribute(scriptAttrs[j].name, scriptAttrs[j].value);
+    }
+    scripts[i].parentElement.replaceChild(s, scripts[i]);
+  }
+})();
+(function() {
+  var links = document.getElementsByTagName('a');
+  for (var i = 0; i < links.length; i++) {
+    if (/^(https?:)?\/\//.test(links[i].getAttribute('href'))) {
+      links[i].target = '_blank';
+    }
+  }
+})();
+// adds .remark-code-has-line-highlighted class to <pre> parent elements
+// of code chunks containing highlighted lines with class .remark-code-line-highlighted
+(function(d) {
+  const hlines = d.querySelectorAll('.remark-code-line-highlighted');
+  const preParents = [];
+  const findPreParent = function(line, p = 0) {
+    if (p > 1) return null; // traverse up no further than grandparent
+    const el = line.parentElement;
+    return el.tagName === "PRE" ? el : findPreParent(el, ++p);
+  };
+
+  for (let line of hlines) {
+    let pre = findPreParent(line);
+    if (pre && !preParents.includes(pre)) preParents.push(pre);
+  }
+  preParents.forEach(p => p.classList.add("remark-code-has-line-highlighted"));
+})(document);</script>
+
+<script>
+slideshow._releaseMath = function(el) {
+  var i, text, code, codes = el.getElementsByTagName('code');
+  for (i = 0; i < codes.length;) {
+    code = codes[i];
+    if (code.parentNode.tagName !== 'PRE' && code.childElementCount === 0) {
+      text = code.textContent;
+      if (/^\\\((.|\s)+\\\)$/.test(text) || /^\\\[(.|\s)+\\\]$/.test(text) ||
+          /^\$\$(.|\s)+\$\$$/.test(text) ||
+          /^\\begin\{([^}]+)\}(.|\s)+\\end\{[^}]+\}$/.test(text)) {
+        code.outerHTML = code.innerHTML;  // remove <code></code>
+        continue;
+      }
+    }
+    i++;
+  }
+};
+slideshow._releaseMath(document);
+</script>
+<!-- dynamically load mathjax for compatibility with self-contained -->
+<script>
+(function () {
+  var script = document.createElement('script');
+  script.type = 'text/javascript';
+  script.src  = 'https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-MML-AM_CHTML';
+  if (location.protocol !== 'file:' && /^https?:/.test(script.src))
+    script.src  = script.src.replace(/^https?:/, '');
+  document.getElementsByTagName('head')[0].appendChild(script);
+})();
+</script>
+  </body>
+</html>
